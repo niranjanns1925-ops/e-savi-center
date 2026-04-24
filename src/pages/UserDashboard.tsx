@@ -36,7 +36,10 @@ interface Notification {
 
 function UserOverview({ services }: { services: Service[] }) {
   const [search, setSearch] = useState('');
-  const filteredServices = services.filter(s => (s.title || '').toLowerCase().includes(search.toLowerCase()));
+  const filteredServices = services.filter(s => 
+    (s.title || '').toLowerCase().includes(search.toLowerCase()) || 
+    (s.description || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">

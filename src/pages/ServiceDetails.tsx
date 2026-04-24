@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, sendNotification, storage } from '../lib/firebase';
+import { db, sendNotification } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG as QRCode } from 'qrcode.react'; 
-import { Check, ArrowLeft, Loader2, ShieldCheck, ChevronRight, FileText, Smartphone, Upload, X, AlertCircle, IndianRupee, CheckCircle } from 'lucide-react';
+import { Check, ArrowLeft, Loader2, ShieldCheck, ChevronRight, FileText, Smartphone, Upload, X, AlertCircle, IndianRupee, CheckCircle, Lock } from 'lucide-react';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function ServiceDetails() {
   const { id } = useParams();
@@ -47,14 +52,14 @@ export default function ServiceDetails() {
 
   const validateFiles = (files: File[]): string | null => {
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-    const maxSize = 5 * 1024 * 1024;
+    const maxSize = 800 * 1024; // 800KB max for Firestore document limits
 
     for (const file of files) {
       if (!allowedTypes.includes(file.type)) {
         return `File type "${file.type}" not supported. Use PDF, JPG, or PNG.`;
       }
       if (file.size > maxSize) {
-        return `File "${file.name}" is too large. Maximum size is 5MB.`;
+        return `File "${file.name}" is too large. Maximum size is 800KB (since Storage is not configured).`;
       }
     }
     return null;
@@ -96,46 +101,97 @@ export default function ServiceDetails() {
     setStep('payment');
   };
 
-  const handlePaymentConfirm = () => {
-    setStep('validation');
-  };
-
-  const validateTransaction = async () => {
-    setValidationError('');
-    // Mock robust validation: Check if it's strictly 12 digits
-    const utrRegex = /^[0-9]{12}$/;
-    if (!transactionId.trim() || !utrRegex.test(transactionId.trim())) {
-      setValidationError('Invalid Transaction ID. Please enter the valid 12-digit numeric UTR number.');
-      return;
-    }
-
+  const initiateRazorpayPayment = async () => {
     setIsSubmitting(true);
+    setValidationError('');
     try {
       if (!service || !user) return;
 
-      // Verify via backend API (Razorpay proxy)
-      const response = await fetch('/api/verify-payment', {
+      // 1. Create order
+      const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: transactionId.trim() })
+        body: JSON.stringify({ amount: service.price, currency: 'INR' })
       });
-      const verification = await response.json();
-      
-      if (!verification.success) {
-        throw new Error(verification.message);
-      }
+      const orderData = await orderRes.json();
+      if (!orderData.success) throw new Error(orderData.message || 'Failed to create order');
 
+      // 2. Fetch key
+      const keyRes = await fetch('/api/razorpay-key');
+      const keyData = await keyRes.json();
+
+      // 3. Initialize Razorpay
+      const options = {
+        key: keyData.keyId,
+        amount: orderData.order.amount,
+        currency: orderData.order.currency,
+        name: "Lakshmi E-Sevai Maiyam",
+        description: `Payment for ${service.title}`,
+        order_id: orderData.order.id,
+        handler: async function (response: any) {
+          try {
+            setStep('validation'); // Move to loading step
+            setTransactionId(response.razorpay_payment_id);
+            
+            // 4. Verify payment
+            const verifyRes = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            const verifyData = await verifyRes.json();
+            
+            if (!verifyData.success) throw new Error(verifyData.message || 'Payment verification failed');
+            
+            await finalizeApplication(response.razorpay_payment_id);
+          } catch (err: any) {
+             console.error(err);
+             setValidationError(err.message || "Payment verification failed.");
+             setStep('payment'); // Go back on error
+          }
+        },
+        prefill: {
+          name: user.displayName || user.email,
+          email: user.email,
+        },
+        theme: { color: "#4f46e5" } // Indigo-600
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response: any){
+         setValidationError(`Payment Failed: ${response.error.description}`);
+      });
+      rzp.open();
+    } catch (err: any) {
+      console.error(err);
+      setValidationError(err.message || 'Payment initialization failed');
+    } finally {
+      setIsSubmitting(false); // Enable the button again, the popup handles the rest
+    }
+  };
+
+  const finalizeApplication = async (txId: string) => {
+    try {
       const documentRefs: Record<string, any> = {};
       for (const [key, files] of Object.entries(formData)) {
         documentRefs[key] = await Promise.all((files as File[]).map(async f => {
-          const storageRef = ref(storage, `esc/docs/${user.uid}/${Date.now()}_${f.name}`);
-          const snapshot = await uploadBytes(storageRef, f);
-          const downloadURL = await getDownloadURL(snapshot.ref);
+          // Convert to Base64 to bypass Firebase Storage
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(f);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+          });
+          
           return {
             name: f.name,
             size: f.size,
             type: f.type,
-            url: downloadURL, // Store URL instead of content!
+            url: base64Data, // Store Base64 directly
             status: 'verified'
           };
         }));
@@ -149,7 +205,7 @@ export default function ServiceDetails() {
         documents: documentRefs,
         status: 'pending',
         paymentStatus: 'completed',
-        transactionId: transactionId,
+        transactionId: txId,
         amountPaid: service.price,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -161,7 +217,7 @@ export default function ServiceDetails() {
       setReceipt({
         serviceName: service.title,
         amount: service.price,
-        transactionId: transactionId,
+        transactionId: txId,
         date: new Date().toLocaleString()
       });
 
@@ -317,7 +373,7 @@ export default function ServiceDetails() {
                           <Upload className="w-6 h-6" />
                         </div>
                         <p className="text-sm font-bold text-slate-900 mb-1">Drag & drop or click to upload</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">PDF, JPG or PNG (Max 5MB each)</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">PDF, JPG or PNG (Max 800KB each)</p>
                       </div>
 
                       {fileErrors[docName] && (
@@ -406,22 +462,32 @@ export default function ServiceDetails() {
               </div>
 
               <div className="flex flex-col items-center mb-10">
-                <div className="bg-white border-2 border-slate-100 rounded-[2.5rem] p-6 shadow-inner mb-6">
-                  <QRCode value={upiUrl} size={180} />
-                </div>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">Scan using any UPI App</p>
-                <p className="text-3xl font-black text-slate-900 tracking-tight">₹{service.price.toFixed(2)}</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                   <Lock className="w-3 h-3" /> Secure processing via Razorpay
+                </p>
+                {validationError && (
+                  <p className="text-xs text-red-500 font-bold flex items-center gap-1 mt-4 bg-red-50 p-2 rounded-lg">
+                    <AlertCircle className="w-4 h-4" /> {validationError}
+                  </p>
+                )}
               </div>
 
               <button
-                onClick={handlePaymentConfirm}
-                className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95 group"
+                onClick={initiateRazorpayPayment}
+                disabled={isSubmitting}
+                className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95 group disabled:opacity-75"
               >
-                I have paid ₹{service.price} <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                {isSubmitting ? (
+                   <><Loader2 className="w-6 h-6 animate-spin" /> Preparing Checkout...</>
+                ) : (
+                   <>Pay Securely <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" /></>
+                )}
               </button>
               
               <button
                 onClick={() => setStep('docs')}
+                disabled={isSubmitting}
                 className="mt-8 text-slate-400 font-bold hover:text-slate-900 transition-colors text-xs uppercase tracking-[0.2em]"
               >
                 Go Back
@@ -440,50 +506,12 @@ export default function ServiceDetails() {
             <div className="bg-white p-12 rounded-[3.5rem] border border-slate-200 shadow-2xl text-center max-w-md w-full relative overflow-hidden ring-1 ring-slate-100">
               <div className="absolute top-0 inset-x-0 h-2 bg-indigo-600" />
               
-              <div className="flex flex-col items-center gap-4 mb-10">
-                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-50">
-                  <ShieldCheck className="w-8 h-8" />
+              <div className="flex flex-col items-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-50 animate-pulse">
+                  <Loader2 className="w-8 h-8 animate-spin" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Final Verification</h2>
-                <p className="text-sm text-slate-500 font-medium">Please enter your 12-digit UTR or Transaction ID shown in your payment app.</p>
-              </div>
-
-              <div className="space-y-6 text-left">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Transaction Ref ID</label>
-                  <input 
-                    type="text"
-                    value={transactionId}
-                    onChange={(e) => setTransactionId(e.target.value)}
-                    placeholder="Enter 12-digit ID"
-                    className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all font-bold tracking-widest text-center"
-                  />
-                  {validationError && (
-                    <p className="text-xs text-red-500 font-bold flex items-center gap-1 mt-2">
-                      <AlertCircle className="w-3.5 h-3.5" /> {validationError}
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  onClick={validateTransaction}
-                  disabled={isSubmitting}
-                  className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-bold text-lg shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
-                >
-                  {isSubmitting ? (
-                    <>Verifying Transaction... <Loader2 className="w-6 h-6 animate-spin" /></>
-                  ) : (
-                    <>Finalize Application <Check className="w-6 h-6" /></>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => setStep('payment')}
-                  disabled={isSubmitting}
-                  className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-[10px] uppercase tracking-widest"
-                >
-                  Return to QR Code
-                </button>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Finalizing Application</h2>
+                <p className="text-sm text-slate-500 font-medium">Please wait while we securely upload your documents and verify payment. Do not close this window.</p>
               </div>
             </div>
           </motion.div>

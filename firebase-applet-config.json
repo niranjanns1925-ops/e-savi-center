@@ -1,10 +1,10 @@
 {
-  "projectId": "esavai-center",
-  "appId": "1:72681765202:web:3b1f74a69bbb519d9c628b",
-  "apiKey": "AIzaSyAzagW_4Of7Cc4BAlN0KPH6nz1kpnwy--0",
-  "authDomain": "esavai-center.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "esavai-center.firebasestorage.app",
-  "messagingSenderId": "72681765202",
-  "measurementId": "G-0MQMQFSJ5C"
+  "apiKey": "AIzaSyBWF4y-rkj6yCjTZg-OH4TPwmjDq0nXLYA",
+  "authDomain": "lakshmi-e-savai-center.firebaseapp.com",
+  "projectId": "lakshmi-e-savai-center",
+  "storageBucket": "lakshmi-e-savai-center.firebasestorage.app",
+  "messagingSenderId": "205963618309",
+  "appId": "1:205963618309:web:9623535f443ce7fec6946c",
+  "measurementId": "G-XYWK80R2L0",
+  "firestoreDatabaseId": "(default)"
 }

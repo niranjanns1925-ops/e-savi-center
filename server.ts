@@ -4,6 +4,7 @@ import path from "path";
 import Razorpay from "razorpay";
 import dotenv from "dotenv";
 import * as admin from "firebase-admin";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -40,31 +41,51 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API route to get Razorpay key ID
+  app.get("/api/razorpay-key", (req, res) => {
+    res.json({ keyId: process.env.RAZORPAY_KEY_ID });
+  });
+
+  // API route to create a Razorpay order
+  app.post("/api/create-order", async (req, res) => {
+    try {
+      const { amount, currency, receipt } = req.body;
+
+      if (!amount) {
+        return res.status(400).json({ success: false, message: "Amount is required" });
+      }
+
+      const options = {
+        amount: Math.round(amount * 100), // amount in smallest currency unit (paise)
+        currency: currency || "INR",
+        receipt: receipt || `receipt_${Date.now()}`,
+      };
+
+      const order = await razorpay.orders.create(options);
+      res.json({ success: true, order });
+    } catch (error) {
+      console.error("Razorpay order creation error:", error);
+      res.status(500).json({ success: false, message: "Failed to create order." });
+    }
+  });
+
   // API route for payment verification
   app.post("/api/verify-payment", async (req, res) => {
-    const { transactionId } = req.body;
-    
-    if (!transactionId) {
-      return res.status(400).json({ success: false, message: "Missing transactionId" });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: "Missing required payment details" });
     }
 
     try {
-      // In a real Razorpay integration, verifying a UTR might require 
-      // looking up payments via the Razorpay Payments API.
-      // Example: razorpay.payments.fetch(transactionId)
-      
-      // For this integration, we simulate checking validity.
-      // Replace with actual Razorpay API method: 
-      // const payment = await razorpay.payments.fetch(transactionId);
-      // const isValid = payment.status === 'captured';
+      const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!);
+      hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+      const generated_signature = hmac.digest("hex");
 
-      // SIMULATION: Check if ID is 12 digits numeric
-      const isValid = /^[0-9]{12}$/.test(transactionId);
-
-      if (isValid) {
+      if (generated_signature === razorpay_signature) {
         res.json({ success: true, message: "Payment verified successfully." });
       } else {
-        res.json({ success: false, message: "Invalid or unverified transaction ID." });
+        res.status(400).json({ success: false, message: "Invalid signature" });
       }
     } catch (error) {
       console.error("Razorpay verification error:", error);

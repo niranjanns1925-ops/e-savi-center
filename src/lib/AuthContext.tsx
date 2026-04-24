@@ -47,8 +47,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      console.error("Sign in error:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        alert("Firebase is blocking this login because the domain is not authorized.\n\nPlease go to:\nFirebase Console > Authentication > Settings > Authorized Domains\n\nAnd add the following domains:\n1. " + window.location.hostname + "\n2. e-savi-center.vercel.app");
+      } else if (error.code !== 'auth/popup-closed-by-user') {
+        alert("Failed to sign in: " + error.message);
+      }
+    }
   };
 
   const logOut = async () => {
