@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 0.1 Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'niranjanns1925@gmail.com'
+      );
+    }
+    
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // 1. Services
+    match /services/{serviceId} {
+      function isValidService(data) {
+        return data.title is string && data.title.size() <= 100 &&
+               data.description is string && data.description.size() <= 1000 &&
+               data.requiredDocuments is list && data.requiredDocuments.size() <= 20 &&
+               data.price is number && data.price >= 0 &&
+               data.isActive is bool;
+      }
+      
+      allow read: if true; // Public can see services
+      allow create: if isAdmin() && isValidService(incoming());
+      allow update: if isAdmin() && isValidService(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 2. Requests
+    match /requests/{requestId} {
+      function isValidRequest(data) {
+        return data.userId == request.auth.uid &&
+               data.userEmail == request.auth.token.email &&
+               data.serviceId is string &&
+               data.status in ['pending', 'accepted', 'rejected'] &&
+               data.paymentStatus in ['pending', 'completed'] &&
+               (data.rejectionReason == null || data.rejectionReason is string) &&
+               data.createdAt == (resource == null ? request.time : resource.data.createdAt);
+      }
+
+      allow create: if isVerified() && 
+                    isValidRequest(incoming()) && 
+                    exists(/databases/$(database)/documents/services/$(incoming().serviceId));
+      
+      allow get: if isOwner(existing().userId) || isAdmin();
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      
+      allow update: if (isOwner(existing().userId) || isAdmin()) && (
+        // User update: only allowed if status is pending and they are not changing status/rejectionReason
+        (isOwner(existing().userId) && existing().status == 'pending' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'paymentStatus', 'paymentReference', 'updatedAt'])) ||
+        
+        // Admin update: can change status and rejectionReason
+        (isAdmin() && (
+          // Action: Accept/Reject
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason', 'updatedAt']) &&
+           (incoming().status != 'rejected' || (incoming().rejectionReason is string && incoming().rejectionReason.size() > 0)))
+        ))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // 3. User Profiles
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.email is string && 
+               data.email == request.auth.token.email &&
+               data.role in ['user', 'admin'] &&
+               (data.displayName == null || data.displayName is string) &&
+               (data.photoURL == null || data.photoURL is string);
+      }
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUser(incoming()) && (
+        // Prevent users from setting themselves as admin unless they are the root admin
+        (incoming().role == 'user' || request.auth.token.email == 'niranjanns1925@gmail.com')
+      );
+      
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Role is immutable for the user unless they are the root admin
+        (incoming().role == existing().role || request.auth.token.email == 'niranjanns1925@gmail.com')
+      );
+    }
+  }
+}

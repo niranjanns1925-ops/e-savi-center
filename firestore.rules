@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'niranjanns1925@gmail.com'
+      );
+    }
+    
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    match /services/{serviceId} {
+      function isValidService(data) {
+        return data.title is string && data.title.size() <= 100 &&
+               data.description is string && data.description.size() <= 1000 &&
+               data.requiredDocuments is list && data.requiredDocuments.size() <= 20 &&
+               data.price is number && data.price >= 0 &&
+               data.isActive is bool;
+      }
+      
+      allow read: if true;
+      allow create: if isAdmin() && isValidService(incoming());
+      allow update: if isAdmin() && isValidService(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /requests/{requestId} {
+      function isValidRequest(data) {
+        return data.userId == request.auth.uid &&
+               data.userEmail == request.auth.token.email &&
+               data.serviceId is string &&
+               data.serviceTitle is string &&
+               data.documents is map &&
+               data.status in ['pending', 'accepted', 'rejected'] &&
+               data.paymentStatus in ['pending', 'completed'] &&
+               data.transactionId is string && data.transactionId.matches('^[0-9]{12}$') &&
+               data.amountPaid is number &&
+               (!('rejectionReason' in data) || data.rejectionReason == null || (data.rejectionReason is string && data.rejectionReason.size() < 1000)) &&
+               data.createdAt is timestamp &&
+               data.updatedAt is timestamp;
+      }
+
+      allow create: if isSignedIn() && 
+                    isValidRequest(incoming()) && 
+                    exists(/databases/$(database)/documents/services/$(incoming().serviceId));
+      
+      allow get: if isOwner(existing().userId) || isAdmin();
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      
+      allow update: if (isOwner(existing().userId) || isAdmin()) && (
+        (isOwner(existing().userId) && existing().status == 'pending' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'paymentStatus', 'paymentReference', 'updatedAt'])) ||
+        
+        (isAdmin() && (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason', 'updatedAt', 'paymentStatus']) &&
+           (incoming().status != 'rejected' || (incoming().rejectionReason is string && incoming().rejectionReason.size() > 0))))
+        )
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.email is string && 
+               data.email == request.auth.token.email &&
+               data.role in ['user', 'admin'] &&
+               (data.displayName == null || data.displayName is string) &&
+               (data.photoURL == null || data.photoURL is string);
+      }
+
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUser(incoming()) && (
+        (incoming().role == 'user' || request.auth.token.email == 'niranjanns1925@gmail.com')
+      );
+      
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        (incoming().role == existing().role || request.auth.token.email == 'niranjanns1925@gmail.com')
+      );
+    }
+
+    // 4. Notifications
+    match /notifications/{notificationId} {
+      function isValidNotification(data) {
+        return data.userId is string &&
+               data.title is string && data.title.size() <= 200 &&
+               data.message is string && data.message.size() <= 1000 &&
+               data.type in ['info', 'success', 'warning', 'error'] &&
+               data.read is bool &&
+               data.createdAt is timestamp;
+      }
+
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      
+      allow create: if isSignedIn() && isValidNotification(incoming()) && (
+        isAdmin() || // Admin can send to anyone
+        incoming().userId == 'admin' // User can only send to admin
+      );
+      
+      allow update: if (isAdmin() || isOwner(existing().userId)) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      
+      allow delete: if isAdmin();
+    }
+  }
+}

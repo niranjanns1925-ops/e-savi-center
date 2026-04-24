@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Service": {
+      "title": "Service Definition",
+      "description": "Attributes for a service offered by the E-Sevai Maiyam",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The name of the service" },
+        "description": { "type": "string", "description": "Details about the service" },
+        "requiredDocuments": { "type": "array", "description": "List of names of documents needed" },
+        "price": { "type": "number", "description": "Cost of the service" },
+        "isActive": { "type": "boolean", "description": "Whether the service is currently offered" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "requiredDocuments", "price", "isActive"]
+    },
+    "Request": {
+      "title": "Service Request",
+      "description": "A user's submission for a particular service",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "serviceTitle": { "type": "string" },
+        "documents": { "type": "object", "description": "Map of document name to submitted data (simulated URL/text for now)" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "rejectionReason": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["pending", "completed"] },
+        "paymentReference": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "serviceId", "status", "paymentStatus"]
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "User account details and roles",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Notification": {
+      "title": "System Notification",
+      "description": "Real-time alerts for users and admins",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Target user ID (or 'admin' for global admin alerts)" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "error"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read"]
+    }
+  },
+  "firestore": {
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Collection of services available for users"
+    },
+    "/requests/{requestId}": {
+      "schema": "Request",
+      "description": "User requests for services"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and permissions"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Real-time notifications"
+    }
+  }
+}
