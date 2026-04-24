@@ -3,8 +3,31 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import Razorpay from "razorpay";
 import dotenv from "dotenv";
+import * as admin from "firebase-admin";
 
 dotenv.config();
+
+let firebaseAdminApp: admin.app.App | null = null;
+
+export function getFirebaseAdmin() {
+  if (!firebaseAdminApp) {
+    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccountKey) {
+      throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is missing.');
+    }
+    
+    try {
+      const serviceAccount = JSON.parse(serviceAccountKey);
+      firebaseAdminApp = admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: process.env.FIREBASE_DATABASE_URL || "https://esavai-center-default-rtdb.firebaseio.com",
+      });
+    } catch (error) {
+      throw new Error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON. Ensure it is a valid JSON string.');
+    }
+  }
+  return firebaseAdminApp;
+}
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,

@@ -261,7 +261,7 @@ function AdminServices({ services, setShowAddService }: { services: Service[], s
             >
               <div className="flex justify-between items-start mb-6">
                 <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-bold text-xl shadow-inner">
-                  {s.title[0]}
+                  {s.title ? s.title[0] : '?'}
                 </div>
                 <div className="flex gap-1">
                   <button 
@@ -285,7 +285,7 @@ function AdminServices({ services, setShowAddService }: { services: Service[], s
               
               <div className="space-y-1.5 mb-6">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Required Docs</span>
-                {s.requiredDocuments.map((rd, i) => (
+                {(s.requiredDocuments || []).map((rd, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs text-slate-600 font-medium">
                     <CheckCircle className="w-3 h-3 text-green-500" />
                     {rd}

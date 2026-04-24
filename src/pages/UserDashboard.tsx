@@ -36,7 +36,7 @@ interface Notification {
 
 function UserOverview({ services }: { services: Service[] }) {
   const [search, setSearch] = useState('');
-  const filteredServices = services.filter(s => s.title.toLowerCase().includes(search.toLowerCase()));
+  const filteredServices = services.filter(s => (s.title || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -75,7 +75,7 @@ function UserOverview({ services }: { services: Service[] }) {
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
                 <Grid className="w-6 h-6" />
               </div>
-              <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title}</h4>
+              <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
               <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
               
               <div className="mt-auto pt-6 border-t border-slate-50 flex justify-between items-center">

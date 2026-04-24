@@ -8,6 +8,7 @@ import ServiceDetails from './pages/ServiceDetails';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 
+import ProfilePage from './pages/ProfilePage';
 import ServiceInfo from './pages/ServiceInfo';
 
 function PrivateRoute({ children, roleRequired }: { children: React.ReactNode, roleRequired?: 'admin' | 'user' }) {
@@ -43,6 +44,12 @@ function AppContent() {
                 <Route path="/user/*" element={
                   <PrivateRoute roleRequired="user">
                     <UserDashboard />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/profile" element={
+                  <PrivateRoute>
+                    <ProfilePage />
                   </PrivateRoute>
                 } />
                 

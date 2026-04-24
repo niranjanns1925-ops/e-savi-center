@@ -27,7 +27,7 @@ service cloud.firestore {
                data.isActive is bool;
       }
       
-      allow read: if true;
+      allow read: if isSignedIn();
       allow create: if isAdmin() && isValidService(incoming());
       allow update: if isAdmin() && isValidService(incoming());
       allow delete: if isAdmin();

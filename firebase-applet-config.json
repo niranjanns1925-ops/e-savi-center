@@ -1,10 +1,10 @@
 {
-  "projectId": "quick-art-469810-j2",
-  "appId": "1:73521819870:web:e13e750ee0efbb0014924f",
-  "apiKey": "AIzaSyDkmBpFHa_tfO0oTq15dCKLjEj_m6xZnf4",
-  "authDomain": "quick-art-469810-j2.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-87d5abbf-da29-40d7-aace-4366e8e19dfc",
-  "storageBucket": "quick-art-469810-j2.firebasestorage.app",
-  "messagingSenderId": "73521819870",
-  "measurementId": ""
+  "projectId": "esavai-center",
+  "appId": "1:72681765202:web:3b1f74a69bbb519d9c628b",
+  "apiKey": "AIzaSyAzagW_4Of7Cc4BAlN0KPH6nz1kpnwy--0",
+  "authDomain": "esavai-center.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "esavai-center.firebasestorage.app",
+  "messagingSenderId": "72681765202",
+  "measurementId": "G-0MQMQFSJ5C"
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, FileText, Bell, Shield, LifeBuoy, ChevronRight } from 'lucide-react';
+import { LayoutGrid, FileText, Bell, Shield, LifeBuoy, ChevronRight, User } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface SidebarProps {
@@ -13,10 +13,12 @@ export default function Sidebar({ role, notificationCount }: SidebarProps) {
     { icon: <LayoutGrid className="w-5 h-5" />, label: 'Overview', path: '/admin' },
     { icon: <FileText className="w-5 h-5" />, label: 'Services', path: '/admin/services' },
     { icon: <Bell className="w-5 h-5" />, label: 'Notifications', path: '/admin/notifications', badge: notificationCount },
+    { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ] : [
     { icon: <LayoutGrid className="w-5 h-5" />, label: 'All Services', path: '/user' },
     { icon: <FileText className="w-5 h-5" />, label: 'My Requests', path: '/user/requests' },
     { icon: <Bell className="w-5 h-5" />, label: 'Notifications', path: '/user/notifications', badge: notificationCount },
+    { icon: <User className="w-5 h-5" />, label: 'Profile', path: '/profile' },
   ];
 
   return (
