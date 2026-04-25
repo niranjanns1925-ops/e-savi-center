@@ -69,7 +69,11 @@ export default function ServiceDetails() {
       const result = await res.json();
       
       if (!result.success || !result.order) {
-        throw new Error(result.message || "Failed to create order");
+        let detailedError = "";
+        if (result.error) {
+          detailedError = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        }
+        throw new Error(`${result.message || "Failed to create order"}${detailedError ? ` - ${detailedError}` : ''}`);
       }
       
       const { order } = result;
@@ -84,7 +88,8 @@ export default function ServiceDetails() {
         const cashfree = window.Cashfree({ mode: "sandbox" });
         
         cashfree.checkout({
-          paymentSessionId: order.payment_session_id
+          paymentSessionId: order.payment_session_id,
+          redirectTarget: "_modal"
         }).then((res: any) => {
           if (res.error) {
             console.error("Payment error from Cashfree:", res.error);
@@ -124,11 +129,11 @@ export default function ServiceDetails() {
     }
   };
 
-  const verifyCashfreePayment = async (orderId: string) => {
+  const verifyCashfreePayment = async (orderId: string, attempts = 0) => {
     try {
       setIsSubmitting(true);
       setStep('validation');
-      setValidationStatus("Verifying payment with bank...");
+      setValidationStatus(attempts > 0 ? `Verifying payment with bank (Attempt ${attempts + 1}/5)...` : "Verifying payment with bank...");
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,9 +149,15 @@ export default function ServiceDetails() {
       
       if (success && data && data.some((p: any) => p.payment_status === 'SUCCESS')) {
         handlePaymentCompleted(orderId);
+      } else if (success && data && data.every((p: any) => p.payment_status === 'PENDING') && attempts < 4) {
+        // robust verification mechanism: retry with exponential backoff or simple delay
+        setTimeout(() => verifyCashfreePayment(orderId, attempts + 1), 2500);
+      } else if (success && data && data.length === 0 && attempts < 4) {
+        // No payments recorded yet, maybe delay and re-check
+        setTimeout(() => verifyCashfreePayment(orderId, attempts + 1), 2500);
       } else {
         const failedPayment = data?.find((p: any) => p.payment_status === 'FAILED');
-        const failureReason = failedPayment?.payment_message || message || "Payment verification failed or status is pending.";
+        const failureReason = failedPayment?.payment_message || message || "Payment verification failed or status is pending/incomplete.";
         setPaymentFeedback({
           message: failureReason,
           action: "Please retry the payment or contact support if the amount was deducted."
@@ -156,12 +167,16 @@ export default function ServiceDetails() {
       }
     } catch (error) {
       console.error("Verification error:", error);
-      setPaymentFeedback({
-        message: "Error verifying payment with the server.",
-        action: "Please check your internet connection and try again."
-      });
-      setStep('payment');
-      setIsSubmitting(false);
+      if (attempts < 4) {
+         setTimeout(() => verifyCashfreePayment(orderId, attempts + 1), 2500);
+      } else {
+        setPaymentFeedback({
+          message: "Error verifying payment with the server after multiple attempts.",
+          action: "Please check your internet connection and try again later."
+        });
+        setStep('payment');
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -265,6 +280,7 @@ export default function ServiceDetails() {
         documents: documentRefs,
         status: 'pending',
         paymentStatus: 'completed',
+        paymentCompletedAt: serverTimestamp(),
         transactionId: txId,
         amountPaid: service.price,
         createdAt: serverTimestamp(),
@@ -512,9 +528,15 @@ export default function ServiceDetails() {
                 <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase tracking-widest">Safe Gateway</h2>
               </div>
               
-              <div className="bg-slate-50 rounded-2xl p-5 mb-10 border border-dashed border-slate-300">
+              <div className="bg-slate-50 rounded-2xl p-5 mb-10 border border-dashed border-slate-300 relative">
                 <p className="text-xs font-bold text-indigo-600 mb-1">{service.title}</p>
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Transaction Authorization Pending</p>
+                {cashfreeOrderId && (
+                   <p className="mt-3 pt-3 border-t border-slate-200 text-[10px] font-mono text-slate-500 break-all bg-slate-100 p-2 rounded-lg text-center">
+                     <span className="font-bold text-slate-400 uppercase tracking-wider block mb-1">Order Ref ID</span>
+                     {cashfreeOrderId}
+                   </p>
+                )}
               </div>
 
               <div className="flex flex-col items-center mb-10 w-full gap-4">

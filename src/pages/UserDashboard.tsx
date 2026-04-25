@@ -3,7 +3,7 @@ import { collection, query, onSnapshot, where, orderBy, doc, updateDoc } from 'f
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck } from 'lucide-react';
+import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link, Routes, Route } from 'react-router-dom';
 
@@ -73,39 +73,56 @@ function UserOverview({ services }: { services: Service[] }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <AnimatePresence>
-          {filteredServices.map((s: any) => (
-            <motion.div
-              layout
-              key={s.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`bg-white rounded-3xl p-6 shadow-sm flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-indigo-600 hover:shadow-md transition-shadow' : 'border-l-slate-200 grayscale opacity-70'}`}
-            >
-              {!s.isActive && (
-                <div className="absolute top-4 right-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg">
-                  Inactive
+          {filteredServices.map((s: any) => {
+            const hasNoDocs = !s.requiredDocuments || s.requiredDocuments.length === 0;
+            const isInactive = !s.isActive;
+            const needsAttention = hasNoDocs || isInactive;
+            
+            return (
+              <motion.div
+                layout
+                key={s.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`bg-white rounded-3xl p-6 shadow-sm flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-indigo-600 hover:shadow-md transition-shadow' : 'border-l-slate-200 grayscale opacity-70'}`}
+              >
+                {needsAttention && (
+                  <div className="absolute top-4 right-4 group/tooltip flex items-center justify-center">
+                    {isInactive ? (
+                       <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg">
+                         Inactive
+                       </div>
+                    ) : (
+                       <AlertTriangle className="w-5 h-5 text-amber-500 cursor-help" />
+                    )}
+                    <div className="absolute bottom-full right-0 mb-2 w-56 p-3 bg-slate-900 text-white text-xs rounded-xl shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-10 font-medium">
+                      {isInactive && !hasNoDocs && "This service is currently inactive."}
+                      {hasNoDocs && !isInactive && "This service requires documents to be configured by the admin."}
+                      {hasNoDocs && isInactive && "Inactive & missing required documents."}
+                    </div>
+                  </div>
+                )}
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <Grid className="w-6 h-6" />
                 </div>
-              )}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
-                <Grid className="w-6 h-6" />
-              </div>
-              <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
-              <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
-              
-              <div className="mt-auto pt-6 border-t border-slate-50 flex justify-between items-center">
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Fee Starts from</span>
-                  <span className="text-xl font-black text-slate-900 tracking-tight">₹{s.price}</span>
+                <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
+                <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
+                
+                <div className="mt-auto pt-6 border-t border-slate-50 flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Fee Starts from</span>
+                    <span className="text-xl font-black text-slate-900 tracking-tight">₹{s.price}</span>
+                  </div>
+                  <Link
+                    to={`/service/${s.id}`}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive && !hasNoDocs ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'}`}
+                  >
+                    View Details
+                  </Link>
                 </div>
-                <Link
-                  to={`/service/${s.id}`}
-                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'}`}
-                >
-                  View Details
-                </Link>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
         {filteredServices.length === 0 && (
           <div className="col-span-full py-16 md:py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">

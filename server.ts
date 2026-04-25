@@ -8,9 +8,11 @@ import crypto from "crypto";
 
 dotenv.config();
 
-Cashfree.XClientId = process.env.CASHFREE_CLIENT_ID || "TEST_APP_ID";
-Cashfree.XClientSecret = process.env.CASHFREE_CLIENT_SECRET || "TEST_SECRET_KEY";
-Cashfree.XEnvironment = CFEnvironment.SANDBOX;
+const cashfreeClient = new Cashfree(
+  CFEnvironment.SANDBOX,
+  process.env.CASHFREE_CLIENT_ID || "TEST_APP_ID",
+  process.env.CASHFREE_CLIENT_SECRET || "TEST_SECRET_KEY"
+);
 
 let firebaseAdminApp: admin.app.App | null = null;
 
@@ -54,7 +56,7 @@ async function startServer() {
         return res.status(400).send("Missing webhook headers or body");
       }
 
-      Cashfree.PGVerifyWebhookSignature(signature, req.rawBody, timestamp);
+      cashfreeClient.PGVerifyWebhookSignature(signature, req.rawBody, timestamp);
       
       const payload = req.body;
       console.log("Verified Cashfree Webhook:", payload);
@@ -93,11 +95,11 @@ async function startServer() {
         return res.status(500).json({ success: false, message: "Payment gateway is not configured. Please add CASHFREE_CLIENT_ID to environment variables." });
       }
 
-      const order = await Cashfree.PGCreateOrder("2023-08-01", orderRequest);
+      const order = await cashfreeClient.PGCreateOrder(orderRequest);
       res.json({ success: true, order: order.data });
-    } catch (error) {
-      console.error("Cashfree order creation error:", error);
-      res.status(500).json({ success: false, message: "Failed to create order." });
+    } catch (error: any) {
+      console.error("Cashfree order creation error:", error?.response?.data || error);
+      res.status(500).json({ success: false, message: "Failed to create order.", error: error?.response?.data || error.message });
     }
   });
 
@@ -113,11 +115,11 @@ async function startServer() {
         return res.status(500).json({ success: false, message: "Payment gateway is not configured." });
       }
       
-      const response = await Cashfree.PGOrderFetchPayments("2023-08-01", order_id);
+      const response = await cashfreeClient.PGOrderFetchPayments(order_id);
       res.json({ success: true, data: response.data });
-    } catch (error) {
-      console.error("Cashfree verification error:", error);
-      res.status(500).json({ success: false, message: "Verification failed." });
+    } catch (error: any) {
+      console.error("Cashfree verification error:", error?.response?.data || error);
+      res.status(500).json({ success: false, message: "Verification failed.", error: error?.response?.data || error.message });
     }
   });
 

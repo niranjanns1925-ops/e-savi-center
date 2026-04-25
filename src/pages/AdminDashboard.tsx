@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db, sendNotification } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, CheckCircle, XCircle, FileText, ChevronRight, MessageSquare, AlertCircle, Inbox, Bell, Pencil } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, FileText, ChevronRight, MessageSquare, AlertCircle, Inbox, Bell, Pencil, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 
@@ -41,6 +41,7 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
   const [viewingDocs, setViewingDocs] = useState<Request | null>(null);
   const [previewDoc, setPreviewDoc] = useState<{ url: string, name: string, type: string } | null>(null);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   useEffect(() => {
     let urlToRevoke: string | null = null;
@@ -75,8 +76,14 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
     };
   }, [previewDoc]);
 
-  // Filter out rejected requests
-  const filteredRequests = requests.filter(r => r.status !== 'rejected');
+  // Filter out rejected requests and sort
+  const filteredRequests = requests
+    .filter(r => r.status !== 'rejected')
+    .sort((a, b) => {
+      const dateA = a.createdAt?.toMillis?.() || 0;
+      const dateB = b.createdAt?.toMillis?.() || 0;
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
 
   const downloadCSV = () => {
     const headers = ['Citizen Email', 'Service Title', 'Status', 'Payment Status', 'Created At'];
@@ -116,12 +123,21 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
           <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Request Queue</h2>
           <p className="text-slate-500 font-medium tracking-wide uppercase text-[10px] mt-1">Real-time Citizen Submissions</p>
         </div>
-        <button
-          onClick={downloadCSV}
-          className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-black transition-all shadow-xl"
-        >
-          Download All Data
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm"
+          >
+            {sortOrder === 'desc' ? <ArrowDown className="w-4 h-4" /> : <ArrowUp className="w-4 h-4" />}
+            Date ({sortOrder === 'desc' ? 'Newest' : 'Oldest'})
+          </button>
+          <button
+            onClick={downloadCSV}
+            className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-black transition-all shadow-md active:scale-95"
+          >
+            Download All Data
+          </button>
+        </div>
       </header>
 
       <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-xl shadow-slate-100">
