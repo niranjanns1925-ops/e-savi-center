@@ -39,6 +39,41 @@ interface Notification {
 
 function AdminOverview({ requests, services, setRejectionModal }: { requests: Request[], services: Service[], setRejectionModal: (id: string) => void }) {
   const [viewingDocs, setViewingDocs] = useState<Request | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ url: string, name: string, type: string } | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let urlToRevoke: string | null = null;
+
+    if (previewDoc?.url.startsWith('data:')) {
+      try {
+        const parts = previewDoc.url.split(',');
+        const base64 = parts[1];
+        const mimeType = parts[0].split(':')[1].split(';')[0];
+        const byteString = atob(base64);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        setPreviewObjectUrl(url);
+        urlToRevoke = url;
+      } catch(e) {
+        console.error("Failed to parse data uri", e);
+        setPreviewObjectUrl(previewDoc.url);
+      }
+    } else {
+      setPreviewObjectUrl(previewDoc?.url || null);
+    }
+
+    return () => {
+      if (urlToRevoke) {
+        URL.revokeObjectURL(urlToRevoke);
+      }
+    };
+  }, [previewDoc]);
 
   // Filter out rejected requests
   const filteredRequests = requests.filter(r => r.status !== 'rejected');
@@ -193,31 +228,22 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
                           <p className="text-[10px] text-indigo-600 font-bold">SHA-256 Verified • {info?.size ? (info.size / 1024).toFixed(1) : '0'} KB</p>
                         </div>
                       </div>
-                      <a 
-                        href="#" 
-                        onClick={async (e) => { 
+                      <button 
+                        onClick={(e) => { 
                           e.preventDefault(); 
-                          try {
-                            const fileUrl = info?.url || info?.content;
-                            if (!fileUrl) {
-                              throw new Error("No URL found for file.");
-                            }
-                            const blob = await fetch(fileUrl).then(r => r.blob());
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = info?.name || 'download';
-                            link.click();
-                            URL.revokeObjectURL(url);
-                          } catch (err) {
-                             console.error("Download failed", err);
-                             alert("Download failed");
+                          const fileUrl = info?.url || info?.content;
+                          if (fileUrl) {
+                            setPreviewDoc({
+                              url: fileUrl,
+                              name: info?.name || 'Document',
+                              type: info?.type || 'application/octet-stream'
+                            });
                           }
                         }}
                         className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-black"
                       >
-                        Download File
-                      </a>
+                        Preview File
+                      </button>
                     </div>
                   ));
                 })}
@@ -231,6 +257,57 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
                   Done Reviewing
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {previewDoc && (
+          <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-[120] backdrop-blur-sm">
+             <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white p-4 rounded-[2rem] w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col"
+            >
+               <div className="flex justify-between items-center mb-4 px-4 pt-2">
+                 <h4 className="font-bold text-xl text-slate-800 tracking-tight">{previewDoc.name}</h4>
+                 <div className="flex items-center gap-2">
+                   <button 
+                     onClick={() => {
+                        if (!previewObjectUrl) return;
+                        try {
+                          const link = document.createElement('a');
+                          link.href = previewObjectUrl;
+                          link.download = previewDoc.name || 'download';
+                          link.click();
+                        } catch (err) {
+                           console.error("Download failed", err);
+                           alert("Download failed");
+                        }
+                     }}
+                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm tracking-wide mr-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                   >
+                     Download
+                   </button>
+                   <button onClick={() => setPreviewDoc(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                      <XCircle className="w-6 h-6 text-slate-400 hover:text-slate-600" />
+                   </button>
+                 </div>
+               </div>
+               <div className="flex-1 overflow-hidden bg-slate-50 rounded-xl relative flex items-center justify-center border border-slate-200">
+                  {previewDoc.type.startsWith('image/') ? (
+                      <img src={previewObjectUrl || ''} alt={previewDoc.name} className="max-w-full max-h-full object-contain p-4" />
+                  ) : previewDoc.type === 'application/pdf' ? (
+                      <iframe src={previewObjectUrl || ''} title={previewDoc.name} className="w-full h-full border-0 rounded-xl bg-white" />
+                  ) : (
+                      <div className="text-center text-slate-500 font-medium flex flex-col items-center">
+                        <FileText className="w-12 h-12 text-slate-300 mb-2" />
+                        <p>Preview not available for this file type.</p>
+                      </div>
+                  )}
+               </div>
             </motion.div>
           </div>
         )}

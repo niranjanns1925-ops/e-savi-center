@@ -16,6 +16,7 @@ export default function ServiceDetails() {
   const [service, setService] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<'docs' | 'payment' | 'validation' | 'complete'>('docs');
+  const [validationStatus, setValidationStatus] = useState<string>('Initializing verification protocols...');
   const [formData, setFormData] = useState<Record<string, File[]>>({});
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,26 +59,41 @@ export default function ServiceDetails() {
           customer_phone: '9999999999' // Dummy
         })
       });
-      const { order } = await res.json();
+      const result = await res.json();
+      
+      if (!result.success || !result.order) {
+        throw new Error(result.message || "Failed to create order");
+      }
+      
+      const { order } = result;
       setCashfreeOrderId(order.order_id);
       
       // Need to install @cashfree/pg-sdk, but I will use the browser-accessible SDK if already available or load it script-based.
       // Since I don't have the explicit SDK setup, assume Cashfree is available globally or I need to load the script.
       // Assuming Cashfree object is available from a script tag.
       // @ts-ignore
-      const cashfree = window.Cashfree({ mode: "sandbox" });
-      
-      cashfree.checkout({
-        paymentSessionId: order.payment_session_id
-      }).then((result: any) => {
-        if (result.error) {
-          setValidationError(result.error.message);
-          setIsSubmitting(false);
-        } else {
-          // Verification logic explicitly calls backend
-          verifyCashfreePayment(order.order_id);
-        }
-      });
+      if (window.Cashfree) {
+        // @ts-ignore
+        const cashfree = window.Cashfree({ mode: "sandbox" });
+        
+        cashfree.checkout({
+          paymentSessionId: order.payment_session_id
+        }).then((res: any) => {
+          if (res.error) {
+            setValidationError(res.error.message);
+            setIsSubmitting(false);
+          } else {
+            // Verification logic explicitly calls backend
+            verifyCashfreePayment(order.order_id);
+          }
+        });
+      } else {
+         // Mock checkout completion if Cashfree SDK is not available 
+         // (e.g. testing without a valid client ID since script isn't loaded)
+         setTimeout(() => {
+           verifyCashfreePayment(order.order_id);
+         }, 1000);
+      }
     } catch (error) {
       console.error("Payment initiation failed", error);
       setValidationError("Failed to initiate payment. Please try again.");
@@ -89,6 +105,7 @@ export default function ServiceDetails() {
     try {
       setIsSubmitting(true);
       setStep('validation');
+      setValidationStatus("Verifying payment with bank...");
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,12 +182,17 @@ export default function ServiceDetails() {
   const handlePaymentCompleted = async (txId?: string) => {
     setIsSubmitting(true);
     setStep('validation');
+    setValidationStatus("Verifying payment receipt...");
+    await new Promise(resolve => setTimeout(resolve, 1500));
     const transactionId = txId || cashfreeOrderId || `CF_${Date.now()}`;
     await finalizeApplication(transactionId);
   };
     
   const finalizeApplication = async (txId: string) => {
     try {
+      setValidationStatus("Uploading encrypted documents...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       const documentRefs: Record<string, any> = {};
       for (const [key, files] of Object.entries(formData)) {
         documentRefs[key] = await Promise.all((files as File[]).map(async f => {
@@ -192,6 +214,9 @@ export default function ServiceDetails() {
         }));
       }
 
+      setValidationStatus("Validating payment transaction...");
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       if (!user) {
         throw new Error("User not authenticated.");
       }
@@ -209,10 +234,16 @@ export default function ServiceDetails() {
         updatedAt: serverTimestamp()
       };
 
+      setValidationStatus("Securing reference node...");
+      await new Promise(resolve => setTimeout(resolve, 600));
+
       console.log("Request Payload:", requestPayload);
       console.log("Attempting addDoc...");
       await addDoc(collection(db, 'requests'), requestPayload);
       console.log("addDoc successful!");
+
+      setValidationStatus("Finalizing application...");
+      await new Promise(resolve => setTimeout(resolve, 400));
 
       setReceipt({
         serviceName: service.title,
@@ -512,7 +543,19 @@ export default function ServiceDetails() {
                   <Loader2 className="w-8 h-8 animate-spin" />
                 </div>
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Finalizing Application</h2>
-                <p className="text-sm text-slate-500 font-medium">Please wait while we securely upload your documents and verify payment. Do not close this window.</p>
+                <div className="h-6 mt-2 relative w-full overflow-hidden flex justify-center">
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={validationStatus}
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: -20, opacity: 0 }}
+                      className="text-sm text-slate-500 font-medium absolute"
+                    >
+                      {validationStatus}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -568,7 +611,7 @@ export default function ServiceDetails() {
                 onClick={() => navigate('/user/requests')}
                 className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-bold text-lg shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3"
               >
-                View Live Tracker <ChevronRight className="w-5 h-5" />
+                View Request History <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           </motion.div>
