@@ -179,41 +179,48 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
               </div>
 
               <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                {Object.entries(viewingDocs.documents).map(([key, info]: [string, any]) => (
-                  <div key={key} className="p-5 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between group">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center text-indigo-600">
-                        <FileText className="w-6 h-6" />
+                {Object.entries(viewingDocs.documents).flatMap(([key, fileOrArray]: [string, any]) => {
+                  const files = Array.isArray(fileOrArray) ? fileOrArray : [fileOrArray];
+                  return files.map((info, index) => (
+                    <div key={`${key}-${index}`} className="p-5 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center text-indigo-600">
+                          <FileText className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest leading-none mb-1">{key}{files.length > 1 ? ` (Part ${index + 1})` : ''}</p>
+                          <p className="text-sm font-bold text-slate-900">{info?.name || 'Document'}</p>
+                          <p className="text-[10px] text-indigo-600 font-bold">SHA-256 Verified • {info?.size ? (info.size / 1024).toFixed(1) : '0'} KB</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest leading-none mb-1">{key}</p>
-                        <p className="text-sm font-bold text-slate-900">{info.name}</p>
-                        <p className="text-[10px] text-indigo-600 font-bold">SHA-256 Verified • {info.size ? (info.size / 1024).toFixed(1) : '0'} KB</p>
-                      </div>
+                      <a 
+                        href="#" 
+                        onClick={async (e) => { 
+                          e.preventDefault(); 
+                          try {
+                            const fileUrl = info?.url || info?.content;
+                            if (!fileUrl) {
+                              throw new Error("No URL found for file.");
+                            }
+                            const blob = await fetch(fileUrl).then(r => r.blob());
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = info?.name || 'download';
+                            link.click();
+                            URL.revokeObjectURL(url);
+                          } catch (err) {
+                             console.error("Download failed", err);
+                             alert("Download failed");
+                          }
+                        }}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-black"
+                      >
+                        Download File
+                      </a>
                     </div>
-                    <a 
-                      href="#" 
-                      onClick={async (e) => { 
-                        e.preventDefault(); 
-                        try {
-                          const blob = await fetch(info.url).then(r => r.blob());
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement('a');
-                          link.href = url;
-                          link.download = info.name;
-                          link.click();
-                          URL.revokeObjectURL(url);
-                        } catch (err) {
-                           console.error("Download failed", err);
-                           alert("Download failed");
-                        }
-                      }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all hover:bg-black"
-                    >
-                      Download File
-                    </a>
-                  </div>
-                ))}
+                  ));
+                })}
               </div>
 
               <div className="mt-10 pt-8 border-t border-slate-100 flex justify-end">
