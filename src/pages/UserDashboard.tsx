@@ -43,22 +43,33 @@ function UserOverview({ services }: { services: Service[] }) {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">E-Service Marketplace</h2>
-          <p className="text-slate-500 font-medium tracking-wide uppercase text-[10px] mt-1">Official Citizen Portal Services</p>
+      <div className="w-full relative mb-8 md:mb-10 rounded-3xl md:rounded-[2rem] overflow-hidden shadow-lg bg-indigo-900">
+        <img 
+          src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=2000" 
+          alt="Dashboard Banner" 
+          className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-60" 
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent"></div>
+        <div className="relative p-6 md:p-8 flex flex-col md:flex-row md:items-end justify-between gap-6 min-h-[220px] md:min-h-[256px]">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">
+               Portal Access
+            </div>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">E-Service Marketplace</h2>
+            <p className="text-indigo-100 font-medium tracking-wide text-sm mt-2 max-w-xl">Official Citizen Portal Services</p>
+          </div>
+          <div className="relative w-full md:max-w-sm shrink-0">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search for a service..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white placeholder:text-white/50 rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm"
+            />
+          </div>
         </div>
-        <div className="relative max-w-sm w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search for a service..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all shadow-sm font-medium text-sm"
-          />
-        </div>
-      </header>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <AnimatePresence>
@@ -68,7 +79,7 @@ function UserOverview({ services }: { services: Service[] }) {
               key={s.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`sleek-card p-6 flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-transparent hover:border-l-indigo-600' : 'border-l-slate-200 grayscale opacity-70'}`}
+              className={`bg-white rounded-3xl p-6 shadow-sm flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-indigo-600 hover:shadow-md transition-shadow' : 'border-l-slate-200 grayscale opacity-70'}`}
             >
               {!s.isActive && (
                 <div className="absolute top-4 right-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg">
@@ -88,7 +99,7 @@ function UserOverview({ services }: { services: Service[] }) {
                 </div>
                 <Link
                   to={`/service/${s.id}`}
-                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'}`}
                 >
                   View Details
                 </Link>
@@ -97,7 +108,7 @@ function UserOverview({ services }: { services: Service[] }) {
           ))}
         </AnimatePresence>
         {filteredServices.length === 0 && (
-          <div className="col-span-full py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
+          <div className="col-span-full py-16 md:py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
             <Inbox className="w-12 h-12 text-slate-200 mx-auto mb-4" />
             <p className="text-slate-400 font-bold text-sm">No services matched your search</p>
           </div>
@@ -115,9 +126,10 @@ function UserRequests({ requests }: { requests: Request[] }) {
         <p className="text-slate-500 font-medium tracking-wide uppercase text-[10px] mt-1">Track Your Submission Status</p>
       </header>
 
-      <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-xl shadow-slate-100">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50/50 border-b border-slate-100">
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[600px]">
+            <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
               <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Service Concept</th>
               <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Current Path</th>
@@ -168,6 +180,7 @@ function UserRequests({ requests }: { requests: Request[] }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

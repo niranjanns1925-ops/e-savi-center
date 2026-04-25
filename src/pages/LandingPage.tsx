@@ -29,7 +29,7 @@ export default function LandingPage() {
         <p className="text-xl text-slate-500 mb-12 max-w-2xl mx-auto leading-relaxed">
           Access all essential government services from a single dashboard. Secure, lightning-fast, and citizen-first.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-24">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
           <button
             onClick={signIn}
             className="w-full sm:w-auto px-10 py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all"
@@ -40,6 +40,24 @@ export default function LandingPage() {
             How it works
           </button>
         </div>
+
+        <motion.div
+           initial={{ opacity: 0, scale: 0.95 }}
+           animate={{ opacity: 1, scale: 1 }}
+           transition={{ delay: 0.2, duration: 0.8 }}
+           className="w-full max-w-5xl mx-auto rounded-[2.5rem] overflow-hidden shadow-2xl mb-24 border border-slate-200 relative group"
+        >
+          <img 
+            src="https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=1200" 
+            alt="Digital Citizen Dashboard Overview" 
+            className="w-full h-[400px] object-cover group-hover:scale-105 transition-transform duration-700"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent"></div>
+          <div className="absolute bottom-8 left-8 text-left">
+             <div className="inline-flex px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">GovTech Portal</div>
+             <p className="text-white font-bold text-2xl tracking-tight max-w-md">Streamlined document verification and digital workflows.</p>
+          </div>
+        </motion.div>
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl">

@@ -196,7 +196,7 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
                       onClick={async (e) => { 
                         e.preventDefault(); 
                         try {
-                          const blob = await fetch(info.content).then(r => r.blob());
+                          const blob = await fetch(info.url).then(r => r.blob());
                           const url = URL.createObjectURL(blob);
                           const link = document.createElement('a');
                           link.href = url;

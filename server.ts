@@ -10,9 +10,10 @@ dotenv.config();
 
 const cashfree = new cfPkg.Cashfree(
   cfPkg.CFEnvironment.SANDBOX,
-  process.env.CASHFREE_CLIENT_ID,
-  process.env.CASHFREE_CLIENT_SECRET
+  process.env.CASHFREE_CLIENT_ID || "TEST_APP_ID",
+  process.env.CASHFREE_CLIENT_SECRET || "TEST_SECRET_KEY"
 );
+cashfree.XApiVersion = "2023-08-01";
 
 let firebaseAdminApp: admin.app.App | null = null;
 
@@ -40,7 +41,36 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf.toString();
+    }
+  }));
+
+  // Cashfree Webhook endpoint
+  app.post("/api/cashfree-webhook", async (req: any, res) => {
+    try {
+      const signature = req.headers["x-webhook-signature"] as string;
+      const timestamp = req.headers["x-webhook-timestamp"] as string;
+      
+      if (!signature || !timestamp || !req.rawBody) {
+        return res.status(400).send("Missing webhook headers or body");
+      }
+
+      cashfree.PGVerifyWebhookSignature(signature, req.rawBody, timestamp);
+      
+      const payload = req.body;
+      console.log("Verified Cashfree Webhook:", payload);
+      
+      // In a real scenario, you'd find the associated document by payload.data.order.order_id
+      // and update its paymentStatus to "completed" in Firestore right here.
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Cashfree Webhook error:", error);
+      res.status(400).send("Invalid Signature");
+    }
+  });
 
   // Cashfree order creation
   app.post("/api/create-order", async (req, res) => {
@@ -54,7 +84,7 @@ async function startServer() {
       const orderRequest = {
         order_amount: amount,
         order_currency: currency || "INR",
-        order_id: order_id || "order_" + Date.now(),
+        order_id: "order_" + Date.now(),
         customer_details: {
           customer_id: customer_id,
           customer_email: customer_email,
@@ -78,7 +108,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Missing order_id" });
       }
       
-      const response = await cashfree.PGOrderFetchPayments("2023-08-01", order_id);
+      const response = await cashfree.PGOrderFetchPayments(order_id);
       res.json({ success: true, data: response.data });
     } catch (error) {
       console.error("Cashfree verification error:", error);

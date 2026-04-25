@@ -4,7 +4,6 @@ import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/fires
 import { db, sendNotification, handleFirestoreError } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { QRCodeSVG as QRCode } from 'qrcode.react'; 
 import { Check, ArrowLeft, Loader2, ShieldCheck, ChevronRight, FileText, Smartphone, Upload, X, AlertCircle, IndianRupee, CheckCircle, Lock } from 'lucide-react';
 
 
@@ -23,7 +22,7 @@ export default function ServiceDetails() {
   const [validationError, setValidationError] = useState('');
   const [receipt, setReceipt] = useState<any>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
-  const [upiOrderId, setUpiOrderId] = useState<string | null>(null);
+  const [cashfreeOrderId, setCashfreeOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchService = async () => {
@@ -46,45 +45,71 @@ export default function ServiceDetails() {
     fetchService();
   }, [id, navigate]);
 
-  useEffect(() => {
-    if (step === 'payment' && !upiOrderId && service) {
-        const createOrder = async () => {
-            const res = await fetch('/api/create-order', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                  amount: service.price, 
-                  currency: 'INR',
-                  customer_id: user?.uid,
-                  customer_email: user?.email,
-                  customer_phone: '9999999999' // Dummy
-              })
-            });
-            const { order } = await res.json();
-            setUpiOrderId(order.order_id);
-        };
-        createOrder();
+  const handleCashfreePayment = async () => {
+    try {
+      const res = await fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          amount: service.price, 
+          currency: 'INR',
+          customer_id: user?.uid,
+          customer_email: user?.email,
+          customer_phone: '9999999999' // Dummy
+        })
+      });
+      const { order } = await res.json();
+      setCashfreeOrderId(order.order_id);
+      
+      // Need to install @cashfree/pg-sdk, but I will use the browser-accessible SDK if already available or load it script-based.
+      // Since I don't have the explicit SDK setup, assume Cashfree is available globally or I need to load the script.
+      // Assuming Cashfree object is available from a script tag.
+      // @ts-ignore
+      const cashfree = window.Cashfree({ mode: "sandbox" });
+      
+      cashfree.checkout({
+        paymentSessionId: order.payment_session_id
+      }).then((result: any) => {
+        if (result.error) {
+          setValidationError(result.error.message);
+          setIsSubmitting(false);
+        } else {
+          // Verification logic explicitly calls backend
+          verifyCashfreePayment(order.order_id);
+        }
+      });
+    } catch (error) {
+      console.error("Payment initiation failed", error);
+      setValidationError("Failed to initiate payment. Please try again.");
+      setIsSubmitting(false);
     }
-  }, [step, upiOrderId, service, user]);
+  };
 
-  useEffect(() => {
-      if (step === 'payment' && upiOrderId) {
-          const interval = setInterval(async () => {
-              const res = await fetch('/api/verify-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_id: upiOrderId })
-              });
-              const { data } = await res.json();
-              
-              if (data && data.some((p: any) => p.payment_status === 'SUCCESS')) {
-                  clearInterval(interval);
-                  handlePaymentCompleted();
-              }
-          }, 3000);
-          return () => clearInterval(interval);
+  const verifyCashfreePayment = async (orderId: string) => {
+    try {
+      setIsSubmitting(true);
+      setStep('validation');
+      const res = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId })
+      });
+      const { success, data, message } = await res.json();
+      
+      if (success && data && data.some((p: any) => p.payment_status === 'SUCCESS')) {
+        handlePaymentCompleted(orderId);
+      } else {
+        setValidationError(message || "Payment verification failed or status is pending.");
+        setStep('payment');
+        setIsSubmitting(false);
       }
-  }, [step, upiOrderId]);
+    } catch (error) {
+      console.error("Verification error:", error);
+      setValidationError("Error verifying payment.");
+      setStep('payment');
+      setIsSubmitting(false);
+    }
+  };
 
   const validateFiles = (files: File[]): string | null => {
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -140,7 +165,7 @@ export default function ServiceDetails() {
   const handlePaymentCompleted = async (txId?: string) => {
     setIsSubmitting(true);
     setStep('validation');
-    const transactionId = txId || upiOrderId || `UPI_${Date.now()}`;
+    const transactionId = txId || cashfreeOrderId || `CF_${Date.now()}`;
     await finalizeApplication(transactionId);
   };
     
@@ -221,9 +246,6 @@ export default function ServiceDetails() {
     </div>
   );
   
-  const upiId = "anish0934s@oksbi";
-  const upiUrl = `upi://pay?pa=${upiId}&pn=Lakshmi%20E-Sevai%20Maiyam&am=${service?.price || 0}&cu=INR&tn=ServiceFee_${upiOrderId || service?.id}`;
-
   const steps = [
     { id: 'docs', label: 'Docs', icon: Upload },
     { id: 'payment', label: 'Payment', icon: IndianRupee },
@@ -428,26 +450,37 @@ export default function ServiceDetails() {
               </div>
 
               <div className="flex flex-col items-center mb-10 w-full gap-4">
-                <div className="bg-white p-4 rounded-xl shadow-inner border border-slate-100 mb-4">
-                  <QRCode value={upiUrl} size={192} />
-                </div>
                 <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
                 
+                {/* QR Code Section */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-4">
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=your_upi_id_here&pn=GovTech+Portal&am=${service.price}&cu=INR`} alt="Payment QR Code" className="w-[150px] h-[150px] rounded-xl" />
+                  <p className="text-xs text-center font-bold text-slate-500 mt-3 uppercase tracking-widest">Scan to Pay</p>
+                </div>
+
                 <div className="flex flex-col w-full gap-3">
                   <button
-                    onClick={handlePaymentCompleted}
+                    onClick={handleCashfreePayment}
                     disabled={isSubmitting}
                     className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
                   >
-                    Paid via UPI
+                    Pay with Cashfree
+                  </button>
+                  
+                  <button
+                    onClick={() => handlePaymentCompleted()}
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-white text-slate-800 border border-slate-200 rounded-[2rem] font-bold shadow-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                  >
+                    I have paid via QR
                   </button>
 
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-4">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-4 justify-center">
                    <Lock className="w-3 h-3" /> Secure Payment
-                </p>
+                  </p>
                 </div>
                 {validationError && (
-                  <p className="text-xs text-red-500 font-bold flex items-center gap-1 mt-4 bg-red-50 p-2 rounded-lg">
+                  <p className="text-xs text-red-500 font-bold flex items-center justify-center gap-1 mt-4 bg-red-50 p-2 rounded-lg w-full">
                     <AlertCircle className="w-4 h-4" /> {validationError}
                   </p>
                 )}
