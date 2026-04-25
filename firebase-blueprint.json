@@ -7,9 +7,37 @@
       "properties": {
         "title": { "type": "string", "description": "Title of the service" },
         "description": { "type": "string", "description": "Description of the service" },
+        "requiredDocuments": { "type": "array", "description": "List of required document names" },
         "status": { "type": "string", "enum": ["active", "inactive"], "description": "Service status" }
       },
-      "required": ["title", "description", "status"]
+      "required": ["title", "description", "requiredDocuments", "status"]
+    },
+    "Request": {
+      "title": "Request",
+      "description": "User service request",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User ID" },
+        "serviceId": { "type": "string", "description": "Service ID" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "paid", "completed"], "description": "Request status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Created at" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Updated at" },
+        "adminReason": { "type": "string", "description": "Reason for approval/rejection" }
+      },
+      "required": ["userId", "serviceId", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Service payment record",
+      "type": "object",
+      "properties": {
+        "requestId": { "type": "string", "description": "Request ID" },
+        "userId": { "type": "string", "description": "User ID" },
+        "amount": { "type": "number", "description": "Amount paid" },
+        "status": { "type": "string", "enum": ["pending", "completed"], "description": "Payment status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Created at" }
+      },
+      "required": ["requestId", "userId", "amount", "status", "createdAt"]
     },
     "Notification": {
       "title": "Notification",
@@ -30,6 +58,14 @@
     "services": {
       "schema": "Service",
       "description": "Services collection"
+    },
+    "requests": {
+      "schema": "Request",
+      "description": "Requests collection"
+    },
+    "payments": {
+      "schema": "Payment",
+      "description": "Payments collection"
     },
     "notifications": {
       "schema": "Notification",

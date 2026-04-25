@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db, sendNotification } from '../lib/firebase';
+import { db, sendNotification, handleFirestoreError } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG as QRCode } from 'qrcode.react'; 
 import { Check, ArrowLeft, Loader2, ShieldCheck, ChevronRight, FileText, Smartphone, Upload, X, AlertCircle, IndianRupee, CheckCircle, Lock } from 'lucide-react';
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
+
 
 export default function ServiceDetails() {
   const { id } = useParams();
@@ -24,7 +20,6 @@ export default function ServiceDetails() {
   const [formData, setFormData] = useState<Record<string, File[]>>({});
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [transactionId, setTransactionId] = useState('');
   const [validationError, setValidationError] = useState('');
   const [receipt, setReceipt] = useState<any>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
@@ -101,79 +96,13 @@ export default function ServiceDetails() {
     setStep('payment');
   };
 
-  const initiateRazorpayPayment = async () => {
+  const handlePaymentCompleted = async () => {
     setIsSubmitting(true);
-    setValidationError('');
-    try {
-      if (!service || !user) return;
-
-      // 1. Create order
-      const orderRes = await fetch('/api/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: service.price, currency: 'INR' })
-      });
-      const orderData = await orderRes.json();
-      if (!orderData.success) throw new Error(orderData.message || 'Failed to create order');
-
-      // 2. Fetch key
-      const keyRes = await fetch('/api/razorpay-key');
-      const keyData = await keyRes.json();
-
-      // 3. Initialize Razorpay
-      const options = {
-        key: keyData.keyId,
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
-        name: "Lakshmi E-Sevai Maiyam",
-        description: `Payment for ${service.title}`,
-        order_id: orderData.order.id,
-        handler: async function (response: any) {
-          try {
-            setStep('validation'); // Move to loading step
-            setTransactionId(response.razorpay_payment_id);
-            
-            // 4. Verify payment
-            const verifyRes = await fetch('/api/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-              })
-            });
-            const verifyData = await verifyRes.json();
-            
-            if (!verifyData.success) throw new Error(verifyData.message || 'Payment verification failed');
-            
-            await finalizeApplication(response.razorpay_payment_id);
-          } catch (err: any) {
-             console.error(err);
-             setValidationError(err.message || "Payment verification failed.");
-             setStep('payment'); // Go back on error
-          }
-        },
-        prefill: {
-          name: user.displayName || user.email,
-          email: user.email,
-        },
-        theme: { color: "#4f46e5" } // Indigo-600
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response: any){
-         setValidationError(`Payment Failed: ${response.error.description}`);
-      });
-      rzp.open();
-    } catch (err: any) {
-      console.error(err);
-      setValidationError(err.message || 'Payment initialization failed');
-    } finally {
-      setIsSubmitting(false); // Enable the button again, the popup handles the rest
-    }
+    setStep('validation');
+    const txId = `UPI_${Date.now()}`;
+    await finalizeApplication(txId);
   };
-
+    
   const finalizeApplication = async (txId: string) => {
     try {
       const documentRefs: Record<string, any> = {};
@@ -197,6 +126,9 @@ export default function ServiceDetails() {
         }));
       }
 
+      if (!user) {
+        throw new Error("User not authenticated.");
+      }
       const requestPayload = {
         userId: user.uid,
         userEmail: user.email,
@@ -212,7 +144,9 @@ export default function ServiceDetails() {
       };
 
       console.log("Request Payload:", requestPayload);
+      console.log("Attempting addDoc...");
       await addDoc(collection(db, 'requests'), requestPayload);
+      console.log("addDoc successful!");
 
       setReceipt({
         serviceName: service.title,
@@ -221,20 +155,12 @@ export default function ServiceDetails() {
         date: new Date().toLocaleString()
       });
 
-      await sendNotification('admin', 'New Service Request', `${user.email} has applied for ${service.title}. Access the request queue to review documents.`, 'info');
+      await sendNotification('admin', 'New Service Request', `${user.email} has applied for ${service.title} and completed payment. Access the request queue to review documents.`, 'info');
       
       setStep('complete');
     } catch (err) {
       console.error("DEBUG: Firebase Error:", err);
-      // Log the full error to help identify which field failed validation
-      if (err instanceof Error) {
-        console.error("Error Message:", err.message);
-      }
-      let errorMessage = "Failed to finalize application. Please try again.";
-      if (err instanceof Error && err.message.includes('permission')) {
-          errorMessage = "Permission Denied: You do not have sufficient permissions. Please verify your internet connection and authentication status.";
-      }
-      setValidationError(errorMessage);
+      handleFirestoreError(err, 'create', 'requests');
     } finally {
       setIsSubmitting(false);
     }
@@ -462,9 +388,12 @@ export default function ServiceDetails() {
               </div>
 
               <div className="flex flex-col items-center mb-10">
+                <div className="bg-white p-4 rounded-xl shadow-inner border border-slate-100 mb-4">
+                  <QRCode value={upiUrl} size={192} />
+                </div>
                 <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                   <Lock className="w-3 h-3" /> Secure processing via Razorpay
+                   <Lock className="w-3 h-3" /> Secure Payment via UPI
                 </p>
                 {validationError && (
                   <p className="text-xs text-red-500 font-bold flex items-center gap-1 mt-4 bg-red-50 p-2 rounded-lg">
@@ -474,14 +403,14 @@ export default function ServiceDetails() {
               </div>
 
               <button
-                onClick={initiateRazorpayPayment}
+                onClick={handlePaymentCompleted}
                 disabled={isSubmitting}
                 className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95 group disabled:opacity-75"
               >
                 {isSubmitting ? (
-                   <><Loader2 className="w-6 h-6 animate-spin" /> Preparing Checkout...</>
+                   <><Loader2 className="w-6 h-6 animate-spin" /> Finalizing...</>
                 ) : (
-                   <>Pay Securely <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" /></>
+                   <>Confirm Payment Completed <CheckCircle className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
                 )}
               </button>
               

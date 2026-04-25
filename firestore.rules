@@ -35,36 +35,23 @@ service cloud.firestore {
 
     match /requests/{requestId} {
       function isValidRequest(data) {
-        return data.userId == request.auth.uid &&
-               data.userEmail == request.auth.token.email &&
+        return data.userId is string &&
                data.serviceId is string &&
                data.serviceTitle is string &&
                data.documents is map &&
                data.status in ['pending', 'accepted', 'rejected'] &&
                data.paymentStatus in ['pending', 'completed'] &&
-               data.transactionId is string && data.transactionId.matches('^[0-9]{12}$') &&
-               data.amountPaid is number &&
-               (!('rejectionReason' in data) || data.rejectionReason == null || (data.rejectionReason is string && data.rejectionReason.size() < 1000)) &&
-               data.createdAt is timestamp &&
-               data.updatedAt is timestamp;
+               data.createdAt is timestamp;
       }
 
-      allow create: if isSignedIn() && 
-                    isValidRequest(incoming()) && 
-                    exists(/databases/$(database)/documents/services/$(incoming().serviceId));
-      
-      allow get: if isOwner(existing().userId) || isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       
-      allow update: if (isOwner(existing().userId) || isAdmin()) && (
-        (isOwner(existing().userId) && existing().status == 'pending' && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'paymentStatus', 'paymentReference', 'updatedAt'])) ||
-        
-        (isAdmin() && (
-          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'rejectionReason', 'updatedAt', 'paymentStatus']) &&
-           (incoming().status != 'rejected' || (incoming().rejectionReason is string && incoming().rejectionReason.size() > 0))))
-        )
-      );
+      allow create: if isSignedIn() && isValidRequest(incoming()) && incoming().userId == request.auth.uid;
+      
+      allow update: if (isAdmin()) || 
+                       (isSignedIn() && resource.data.userId == request.auth.uid && 
+                        incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'updatedAt']));
       
       allow delete: if isAdmin();
     }

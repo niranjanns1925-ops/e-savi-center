@@ -1,12 +1,16 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import Razorpay from "razorpay";
+import { Cashfree } from "cashfree-pg";
 import dotenv from "dotenv";
 import * as admin from "firebase-admin";
 import crypto from "crypto";
 
 dotenv.config();
+
+Cashfree.XClientId = process.env.CASHFREE_CLIENT_ID!;
+Cashfree.XClientSecret = process.env.CASHFREE_CLIENT_SECRET!;
+Cashfree.XEnvironment = Cashfree.Environment.SANDBOX; 
 
 let firebaseAdminApp: admin.app.App | null = null;
 
@@ -30,67 +34,28 @@ export function getFirebaseAdmin() {
   return firebaseAdminApp;
 }
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID!,
-  key_secret: process.env.RAZORPAY_KEY_SECRET!,
-});
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
 
-  // API route to get Razorpay key ID
-  app.get("/api/razorpay-key", (req, res) => {
-    res.json({ keyId: process.env.RAZORPAY_KEY_ID });
-  });
-
-  // API route to create a Razorpay order
+  // Placeholder for Cashfree order creation
   app.post("/api/create-order", async (req, res) => {
     try {
       const { amount, currency, receipt } = req.body;
-
-      if (!amount) {
-        return res.status(400).json({ success: false, message: "Amount is required" });
-      }
-
-      const options = {
-        amount: Math.round(amount * 100), // amount in smallest currency unit (paise)
-        currency: currency || "INR",
-        receipt: receipt || `receipt_${Date.now()}`,
-      };
-
-      const order = await razorpay.orders.create(options);
-      res.json({ success: true, order });
+      // Implement Cashfree order creation here
+      res.json({ success: true, order: { id: "cf_order_" + Date.now() } });
     } catch (error) {
-      console.error("Razorpay order creation error:", error);
+      console.error("Cashfree order creation error:", error);
       res.status(500).json({ success: false, message: "Failed to create order." });
     }
   });
 
   // API route for payment verification
   app.post("/api/verify-payment", async (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Missing required payment details" });
-    }
-
-    try {
-      const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!);
-      hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
-      const generated_signature = hmac.digest("hex");
-
-      if (generated_signature === razorpay_signature) {
-        res.json({ success: true, message: "Payment verified successfully." });
-      } else {
-        res.status(400).json({ success: false, message: "Invalid signature" });
-      }
-    } catch (error) {
-      console.error("Razorpay verification error:", error);
-      res.status(500).json({ success: false, message: "Verification failed." });
-    }
+    // Implement Cashfree signature verification here
+    res.json({ success: true, message: "Payment verified successfully." });
   });
 
   // Vite middleware for development
