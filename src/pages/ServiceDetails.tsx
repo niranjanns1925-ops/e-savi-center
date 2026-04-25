@@ -23,6 +23,7 @@ export default function ServiceDetails() {
   const [validationError, setValidationError] = useState('');
   const [receipt, setReceipt] = useState<any>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const [upiOrderId, setUpiOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchService = async () => {
@@ -43,7 +44,47 @@ export default function ServiceDetails() {
       setLoading(false);
     };
     fetchService();
-  }, [id]);
+  }, [id, navigate]);
+
+  useEffect(() => {
+    if (step === 'payment' && !upiOrderId && service) {
+        const createOrder = async () => {
+            const res = await fetch('/api/create-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  amount: service.price, 
+                  currency: 'INR',
+                  customer_id: user?.uid,
+                  customer_email: user?.email,
+                  customer_phone: '9999999999' // Dummy
+              })
+            });
+            const { order } = await res.json();
+            setUpiOrderId(order.order_id);
+        };
+        createOrder();
+    }
+  }, [step, upiOrderId, service, user]);
+
+  useEffect(() => {
+      if (step === 'payment' && upiOrderId) {
+          const interval = setInterval(async () => {
+              const res = await fetch('/api/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: upiOrderId })
+              });
+              const { data } = await res.json();
+              
+              if (data && data.some((p: any) => p.payment_status === 'SUCCESS')) {
+                  clearInterval(interval);
+                  handlePaymentCompleted();
+              }
+          }, 3000);
+          return () => clearInterval(interval);
+      }
+  }, [step, upiOrderId]);
 
   const validateFiles = (files: File[]): string | null => {
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -96,11 +137,11 @@ export default function ServiceDetails() {
     setStep('payment');
   };
 
-  const handlePaymentCompleted = async () => {
+  const handlePaymentCompleted = async (txId?: string) => {
     setIsSubmitting(true);
     setStep('validation');
-    const txId = `UPI_${Date.now()}`;
-    await finalizeApplication(txId);
+    const transactionId = txId || upiOrderId || `UPI_${Date.now()}`;
+    await finalizeApplication(transactionId);
   };
     
   const finalizeApplication = async (txId: string) => {
@@ -179,10 +220,9 @@ export default function ServiceDetails() {
       <button onClick={() => navigate('/user')} className="mt-4 text-indigo-600 underline font-bold">Return to Console</button>
     </div>
   );
-
-  // Progress Bar Steps Definition
-  const upiId = "anish0934s@oksbi"; // Google Pay Merchant ID
-  const upiUrl = `upi://pay?pa=${upiId}&pn=Lakshmi%20E-Sevai%20Maiyam&am=${service?.price || 0}&cu=INR&tn=ServiceFee_${service?.id}`;
+  
+  const upiId = "anish0934s@oksbi";
+  const upiUrl = `upi://pay?pa=${upiId}&pn=Lakshmi%20E-Sevai%20Maiyam&am=${service?.price || 0}&cu=INR&tn=ServiceFee_${upiOrderId || service?.id}`;
 
   const steps = [
     { id: 'docs', label: 'Docs', icon: Upload },
@@ -387,32 +427,31 @@ export default function ServiceDetails() {
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Transaction Authorization Pending</p>
               </div>
 
-              <div className="flex flex-col items-center mb-10">
+              <div className="flex flex-col items-center mb-10 w-full gap-4">
                 <div className="bg-white p-4 rounded-xl shadow-inner border border-slate-100 mb-4">
                   <QRCode value={upiUrl} size={192} />
                 </div>
                 <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
-                   <Lock className="w-3 h-3" /> Secure Payment via UPI
+                
+                <div className="flex flex-col w-full gap-3">
+                  <button
+                    onClick={handlePaymentCompleted}
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                  >
+                    Paid via UPI
+                  </button>
+
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-4">
+                   <Lock className="w-3 h-3" /> Secure Payment
                 </p>
+                </div>
                 {validationError && (
                   <p className="text-xs text-red-500 font-bold flex items-center gap-1 mt-4 bg-red-50 p-2 rounded-lg">
                     <AlertCircle className="w-4 h-4" /> {validationError}
                   </p>
                 )}
               </div>
-
-              <button
-                onClick={handlePaymentCompleted}
-                disabled={isSubmitting}
-                className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-bold text-lg shadow-2xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3 active:scale-95 group disabled:opacity-75"
-              >
-                {isSubmitting ? (
-                   <><Loader2 className="w-6 h-6 animate-spin" /> Finalizing...</>
-                ) : (
-                   <>Confirm Payment Completed <CheckCircle className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
-                )}
-              </button>
               
               <button
                 onClick={() => setStep('docs')}

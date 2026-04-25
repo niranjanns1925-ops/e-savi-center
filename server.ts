@@ -1,16 +1,18 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { Cashfree } from "cashfree-pg";
+import * as cfPkg from "cashfree-pg";
 import dotenv from "dotenv";
 import * as admin from "firebase-admin";
 import crypto from "crypto";
 
 dotenv.config();
 
-Cashfree.XClientId = process.env.CASHFREE_CLIENT_ID!;
-Cashfree.XClientSecret = process.env.CASHFREE_CLIENT_SECRET!;
-Cashfree.XEnvironment = Cashfree.Environment.SANDBOX; 
+const cashfree = new cfPkg.Cashfree(
+  cfPkg.CFEnvironment.SANDBOX,
+  process.env.CASHFREE_CLIENT_ID,
+  process.env.CASHFREE_CLIENT_SECRET
+);
 
 let firebaseAdminApp: admin.app.App | null = null;
 
@@ -40,12 +42,28 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Placeholder for Cashfree order creation
+  // Cashfree order creation
   app.post("/api/create-order", async (req, res) => {
     try {
-      const { amount, currency, receipt } = req.body;
-      // Implement Cashfree order creation here
-      res.json({ success: true, order: { id: "cf_order_" + Date.now() } });
+      const { amount, currency, customer_id, customer_email, customer_phone, order_id } = req.body;
+
+      if (!amount || !customer_id || !customer_email || !customer_phone) {
+        return res.status(400).json({ success: false, message: "Missing required fields" });
+      }
+
+      const orderRequest = {
+        order_amount: amount,
+        order_currency: currency || "INR",
+        order_id: order_id || "order_" + Date.now(),
+        customer_details: {
+          customer_id: customer_id,
+          customer_email: customer_email,
+          customer_phone: customer_phone,
+        },
+      };
+
+      const order = await cashfree.PGCreateOrder(orderRequest);
+      res.json({ success: true, order: order.data });
     } catch (error) {
       console.error("Cashfree order creation error:", error);
       res.status(500).json({ success: false, message: "Failed to create order." });
@@ -54,8 +72,18 @@ async function startServer() {
 
   // API route for payment verification
   app.post("/api/verify-payment", async (req, res) => {
-    // Implement Cashfree signature verification here
-    res.json({ success: true, message: "Payment verified successfully." });
+    try {
+      const { order_id } = req.body;
+      if (!order_id) {
+        return res.status(400).json({ success: false, message: "Missing order_id" });
+      }
+      
+      const response = await cashfree.PGOrderFetchPayments("2023-08-01", order_id);
+      res.json({ success: true, data: response.data });
+    } catch (error) {
+      console.error("Cashfree verification error:", error);
+      res.status(500).json({ success: false, message: "Verification failed." });
+    }
   });
 
   // Vite middleware for development
