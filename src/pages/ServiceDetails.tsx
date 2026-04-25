@@ -88,15 +88,11 @@ export default function ServiceDetails() {
           }
         });
       } else {
-         // Mock checkout completion if Cashfree SDK is not available 
-         // (e.g. testing without a valid client ID since script isn't loaded)
-         setTimeout(() => {
-           verifyCashfreePayment(order.order_id);
-         }, 1000);
+         throw new Error("Cashfree SDK failed to load. Please refresh the page.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Payment initiation failed", error);
-      setValidationError("Failed to initiate payment. Please try again.");
+      setValidationError(error.message || "Failed to initiate payment. Please try again.");
       setIsSubmitting(false);
     }
   };
@@ -483,30 +479,25 @@ export default function ServiceDetails() {
               <div className="flex flex-col items-center mb-10 w-full gap-4">
                 <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
                 
-                {/* QR Code Section */}
-                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-4">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=your_upi_id_here&pn=GovTech+Portal&am=${service.price}&cu=INR`} alt="Payment QR Code" className="w-[150px] h-[150px] rounded-xl" />
-                  <p className="text-xs text-center font-bold text-slate-500 mt-3 uppercase tracking-widest">Scan to Pay</p>
-                </div>
-
                 <div className="flex flex-col w-full gap-3">
                   <button
                     onClick={handleCashfreePayment}
                     disabled={isSubmitting}
                     className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
                   >
-                    Pay with Cashfree
+                    Pay via Cashfree
                   </button>
                   
-                  <button
-                    onClick={() => handlePaymentCompleted()}
-                    disabled={isSubmitting}
-                    className="w-full py-4 bg-white text-slate-800 border border-slate-200 rounded-[2rem] font-bold shadow-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-                  >
-                    I have paid via QR
-                  </button>
+                  <div className="flex justify-center gap-2 items-center opacity-60 mix-blend-luminosity mb-2">
+                    {/* Visual indicators for supported payment methods */}
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Supports:</span>
+                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">GPay</span>
+                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">PhonePe</span>
+                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">UPI</span>
+                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">Cards</span>
+                  </div>
 
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-4 justify-center">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-2 justify-center">
                    <Lock className="w-3 h-3" /> Secure Payment
                   </p>
                 </div>

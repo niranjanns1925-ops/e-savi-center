@@ -90,7 +90,7 @@ async function startServer() {
       };
 
       if (!process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === "TEST_APP_ID") {
-        return res.json({ success: true, order: { order_id: orderRequest.order_id, payment_session_id: "test_session_id", payment_status: "SUCCESS" } });
+        return res.status(500).json({ success: false, message: "Payment gateway is not configured. Please add CASHFREE_CLIENT_ID to environment variables." });
       }
 
       const order = await Cashfree.PGCreateOrder("2023-08-01", orderRequest);
@@ -110,7 +110,7 @@ async function startServer() {
       }
       
       if (!process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === "TEST_APP_ID") {
-        return res.json({ success: true, data: [{ payment_status: 'SUCCESS' }] });
+        return res.status(500).json({ success: false, message: "Payment gateway is not configured." });
       }
       
       const response = await Cashfree.PGOrderFetchPayments("2023-08-01", order_id);

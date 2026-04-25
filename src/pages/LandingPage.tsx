@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
 import { FileText, CreditCard, Bell, ShieldCheck } from 'lucide-react';
+import { Logo } from '../components/Logo';
 
 export default function LandingPage() {
   const { signIn } = useAuth();
@@ -18,8 +19,11 @@ export default function LandingPage() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="max-w-4xl"
+        className="max-w-4xl flex flex-col items-center"
       >
+        <div className="mb-6 flex justify-center">
+            <Logo className="w-32 h-32 drop-shadow-xl" />
+        </div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-xs font-bold uppercase tracking-widest mb-8">
           <ShieldCheck className="w-3.5 h-3.5" /> Trusted by 1M+ Citizens
         </div>

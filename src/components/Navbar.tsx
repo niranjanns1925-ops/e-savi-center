@@ -1,6 +1,7 @@
 import { LogOut, User as UserIcon, Shield } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { motion } from 'motion/react';
+import { Logo } from './Logo';
 
 export default function Navbar() {
   const { user, role, logOut, signIn } = useAuth();
@@ -9,9 +10,7 @@ export default function Navbar() {
     <nav className="h-16 bg-white border-b border-slate-200 sticky top-0 z-50">
       <div className="container mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-            L
-          </div>
+          <Logo className="w-10 h-10" />
           <h1 className="text-xl font-bold tracking-tight text-slate-800 hidden sm:block">
             Lakshmi <span className="text-indigo-600">E-Sevai</span> Maiyam
           </h1>
