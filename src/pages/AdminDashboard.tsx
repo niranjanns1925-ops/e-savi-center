@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, addDoc, updateDoc, doc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db, sendNotification } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, CheckCircle, XCircle, FileText, ChevronRight, MessageSquare, AlertCircle, Inbox, Bell } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, FileText, ChevronRight, MessageSquare, AlertCircle, Inbox, Bell, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 
@@ -316,7 +316,7 @@ function AdminOverview({ requests, services, setRejectionModal }: { requests: Re
   );
 }
 
-function AdminServices({ services, setShowAddService }: { services: Service[], setShowAddService: (v: boolean) => void }) {
+function AdminServices({ services, setShowAddService, openEditModal }: { services: Service[], setShowAddService: () => void, openEditModal: (s: Service) => void }) {
   return (
     <div className="space-y-6">
       <header className="flex justify-between items-end">
@@ -325,7 +325,7 @@ function AdminServices({ services, setShowAddService }: { services: Service[], s
           <p className="text-slate-500 font-medium tracking-wide uppercase text-[10px] mt-1">Manage Citizen Offerings</p>
         </div>
         <button
-          onClick={() => setShowAddService(true)}
+          onClick={() => setShowAddService()}
           className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
         >
           <Plus className="w-5 h-5" /> New Service
@@ -356,8 +356,16 @@ function AdminServices({ services, setShowAddService }: { services: Service[], s
                     {s.isActive ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                   </button>
                   <button 
+                    onClick={() => openEditModal(s)}
+                    className="p-2 text-slate-300 hover:text-indigo-500 transition-colors"
+                    title="Edit Service"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button 
                     onClick={() => deleteDoc(doc(db, 'services', s.id))}
                     className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    title="Delete Service"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -446,6 +454,7 @@ export default function AdminDashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [requests, setRequests] = useState<Request[]>([]);
   const [showAddService, setShowAddService] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newService, setNewService] = useState<Omit<Service, 'id'>>({
     title: '',
     description: '',
@@ -471,15 +480,37 @@ export default function AdminDashboard() {
     return () => { unsubServices(); unsubRequests(); };
   }, []);
 
+  const openEditModal = (s: Service) => {
+    setEditingId(s.id);
+    setNewService({
+      title: s.title,
+      description: s.description,
+      requiredDocuments: s.requiredDocuments || [],
+      price: s.price,
+      isActive: s.isActive
+    });
+    setShowAddService(true);
+  };
+
   const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newService.title || !newService.description) return;
-    await addDoc(collection(db, 'services'), {
-      ...newService,
-      createdAt: serverTimestamp()
-    });
+    
+    if (editingId) {
+      await updateDoc(doc(db, 'services', editingId), {
+        ...newService,
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await addDoc(collection(db, 'services'), {
+        ...newService,
+        createdAt: serverTimestamp()
+      });
+    }
+    
     setNewService({ title: '', description: '', requiredDocuments: [], price: 0, isActive: true });
     setShowAddService(false);
+    setEditingId(null);
   };
 
   const handleStatusUpdate = async (id: string, status: 'rejected') => {
@@ -512,7 +543,11 @@ export default function AdminDashboard() {
     <>
       <Routes>
         <Route path="/" element={<AdminOverview requests={requests} services={services} setRejectionModal={setSelectedRequestId} />} />
-        <Route path="/services" element={<AdminServices services={services} setShowAddService={setShowAddService} />} />
+        <Route path="/services" element={<AdminServices services={services} setShowAddService={() => {
+          setEditingId(null);
+          setNewService({ title: '', description: '', requiredDocuments: [], price: 0, isActive: true });
+          setShowAddService(true);
+        }} openEditModal={openEditModal} />} />
         <Route path="/notifications" element={<AdminNotifications />} />
       </Routes>
       
@@ -566,9 +601,9 @@ export default function AdminDashboard() {
             >
               <div className="flex items-center gap-4 mb-10">
                 <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                  <Plus className="w-6 h-6" />
+                  {editingId ? <Pencil className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
                 </div>
-                <h4 className="text-3xl font-black tracking-tight text-slate-900">Configure Service</h4>
+                <h4 className="text-3xl font-black tracking-tight text-slate-900">{editingId ? 'Edit Service' : 'Configure Service'}</h4>
               </div>
               
               <form onSubmit={handleAddService} className="space-y-8">
@@ -665,11 +700,14 @@ export default function AdminDashboard() {
                     type="submit"
                     className="flex-1 py-5 bg-indigo-600 text-white rounded-[1.5rem] font-bold text-lg hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 active:scale-95"
                   >
-                    Publish Service
+                    {editingId ? 'Update Service' : 'Publish Service'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowAddService(false)}
+                    onClick={() => {
+                      setShowAddService(false);
+                      setEditingId(null);
+                    }}
                     className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-[1.5rem] font-bold text-lg hover:bg-slate-200 transition-all active:scale-95"
                   >
                     Abort

@@ -21,6 +21,7 @@ export default function ServiceDetails() {
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [paymentFeedback, setPaymentFeedback] = useState<{ message: string; action: string } | null>(null);
   const [receipt, setReceipt] = useState<any>(null);
   const [isDragging, setIsDragging] = useState<string | null>(null);
   const [cashfreeOrderId, setCashfreeOrderId] = useState<string | null>(null);
@@ -59,6 +60,12 @@ export default function ServiceDetails() {
           customer_phone: '9999999999' // Dummy
         })
       });
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server did not return a valid response. Please check if the backend is running.");
+      }
+      
       const result = await res.json();
       
       if (!result.success || !result.order) {
@@ -80,7 +87,24 @@ export default function ServiceDetails() {
           paymentSessionId: order.payment_session_id
         }).then((res: any) => {
           if (res.error) {
-            setValidationError(res.error.message);
+            console.error("Payment error from Cashfree:", res.error);
+            let errorMsg = "An unexpected error occurred during payment.";
+            let actionableStep = "Please try again or use a different payment method.";
+            
+            if (res.error.code === "PAYMENT_FAILED") {
+               errorMsg = "Your payment failed. " + (res.error.message || "");
+               actionableStep = "Please check your bank balance or try a different card/UPI account.";
+            } else if (res.error.code === "USER_CANCELLED") {
+               errorMsg = "Payment was cancelled.";
+               actionableStep = "You can initiate the payment again when you are ready.";
+            } else if (res.error.code === "PAYMENT_DECLINED") {
+               errorMsg = "Payment was declined by your bank/provider.";
+               actionableStep = "Please contact your bank or use an alternative payment method.";
+            } else if (res.error.message) {
+               errorMsg = res.error.message;
+            }
+
+            setPaymentFeedback({ message: errorMsg, action: actionableStep });
             setIsSubmitting(false);
           } else {
             // Verification logic explicitly calls backend
@@ -92,7 +116,10 @@ export default function ServiceDetails() {
       }
     } catch (error: any) {
       console.error("Payment initiation failed", error);
-      setValidationError(error.message || "Failed to initiate payment. Please try again.");
+      setPaymentFeedback({ 
+        message: error.message || "Failed to initiate payment.", 
+        action: "Please refresh the page and try again." 
+      });
       setIsSubmitting(false);
     }
   };
@@ -107,18 +134,32 @@ export default function ServiceDetails() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id: orderId })
       });
+      
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server did not return a valid response for payment verification.");
+      }
+      
       const { success, data, message } = await res.json();
       
       if (success && data && data.some((p: any) => p.payment_status === 'SUCCESS')) {
         handlePaymentCompleted(orderId);
       } else {
-        setValidationError(message || "Payment verification failed or status is pending.");
+        const failedPayment = data?.find((p: any) => p.payment_status === 'FAILED');
+        const failureReason = failedPayment?.payment_message || message || "Payment verification failed or status is pending.";
+        setPaymentFeedback({
+          message: failureReason,
+          action: "Please retry the payment or contact support if the amount was deducted."
+        });
         setStep('payment');
         setIsSubmitting(false);
       }
     } catch (error) {
       console.error("Verification error:", error);
-      setValidationError("Error verifying payment.");
+      setPaymentFeedback({
+        message: "Error verifying payment with the server.",
+        action: "Please check your internet connection and try again."
+      });
       setStep('payment');
       setIsSubmitting(false);
     }
@@ -480,31 +521,76 @@ export default function ServiceDetails() {
                 <p className="text-3xl font-black text-slate-900 tracking-tight mb-2">₹{service.price.toFixed(2)}</p>
                 
                 <div className="flex flex-col w-full gap-3">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest text-left mb-2">Select Payment Method</p>
+                  
                   <button
                     onClick={handleCashfreePayment}
                     disabled={isSubmitting}
-                    className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] font-bold shadow-lg hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-white border-2 border-slate-200 text-slate-800 rounded-2xl font-bold shadow-sm hover:border-indigo-600 focus:border-indigo-600 transition-all flex items-center justify-between px-6 group"
                   >
-                    Pay via Cashfree
+                    <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center p-1.5 group-hover:bg-indigo-50">
+                         {/* Simple Google Pay G icon approximation */}
+                         <svg viewBox="0 0 24 24" fill="none" className="w-full h-full"><path d="M11.9 5.3c1.6 0 2.9.6 4.1 1.7l3-3C17.1 2.2 14.8 1.1 11.9 1.1 7.4 1.1 3.5 4 1.8 8l3.6 2.8c.8-2.6 3.3-4.5 6.5-4.5z" fill="#EA4335"/><path d="M23.5 12.2c0-.9-.1-1.7-.2-2.5H11.9v4.5h6.6c-.3 1.4-1.1 2.6-2.3 3.4l3.6 2.8c2.1-2 3.5-4.8 3.5-8.2z" fill="#4285F4"/><path d="M6.5 14.1c-.2-.7-.3-1.4-.3-2.1s.1-1.4.3-2.1L2.9 7.1C2.3 8.3 2 9.7 2 11.2s.3 2.9.9 4.1l3.6-1.2z" fill="#FBBC05"/><path d="M12 23c3.2 0 6-1.1 8-2.9l-3.6-2.8c-1.1.7-2.5 1.1-4 1.1-3.2 0-5.8-2.1-6.8-4.8L2 16.4C3.8 20.3 7.8 23 12 23z" fill="#34A853"/></svg>
+                       </div>
+                       <span>Google Pay</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+                  </button>
+
+                  <button
+                    onClick={handleCashfreePayment}
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-white border-2 border-slate-200 text-slate-800 rounded-2xl font-bold shadow-sm hover:border-indigo-600 focus:border-indigo-600 transition-all flex items-center justify-between px-6 group"
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center p-1.5 group-hover:bg-indigo-50">
+                         {/* Simple PhonePe approximation */}
+                         <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-[#5f259f]"><path d="M14.7 9.8L12 12.5l-1.3-1.3c-.4-.4-1-.4-1.4 0s-.4 1 0 1.4l2 2c.2.2.5.3.7.3s.5-.1.7-.3l3.4-3.4c.4-.4.4-1 0-1.4-.4-.4-1-.4-1.4 0z" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z" fill="currentColor"/></svg>
+                       </div>
+                       <span>PhonePe</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+                  </button>
+
+                  <button
+                    onClick={handleCashfreePayment}
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-white border-2 border-slate-200 text-slate-800 rounded-2xl font-bold shadow-sm hover:border-indigo-600 focus:border-indigo-600 transition-all flex items-center justify-between px-6 group"
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center p-1.5 group-hover:bg-indigo-50">
+                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-full h-full text-slate-700"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h2v2h-2z"/><path d="M19 14h2v2h-2z"/><path d="M14 19h2v2h-2z"/><path d="M19 19h2v2h-2z"/></svg>
+                       </div>
+                       <span>Generate QR Code / Any UPI</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
                   </button>
                   
-                  <div className="flex justify-center gap-2 items-center opacity-60 mix-blend-luminosity mb-2">
-                    {/* Visual indicators for supported payment methods */}
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Supports:</span>
-                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">GPay</span>
-                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">PhonePe</span>
-                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">UPI</span>
-                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 border border-slate-200">Cards</span>
+                  <button
+                    onClick={handleCashfreePayment}
+                    disabled={isSubmitting}
+                    className="w-full py-3 text-slate-500 hover:text-indigo-600 rounded-2xl font-bold text-sm transition-all focus:outline-none underline decoration-slate-300 underline-offset-4"
+                  >
+                    Other options (Netbanking, Cards)
+                  </button>
+                  
+                  <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col items-center">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mb-1">
+                     <Lock className="w-3 h-3" /> Protected by Cashfree Payments
+                    </p>
                   </div>
-
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-2 justify-center">
-                   <Lock className="w-3 h-3" /> Secure Payment
-                  </p>
                 </div>
-                {validationError && (
-                  <p className="text-xs text-red-500 font-bold flex items-center justify-center gap-1 mt-4 bg-red-50 p-2 rounded-lg w-full">
-                    <AlertCircle className="w-4 h-4" /> {validationError}
-                  </p>
+                {paymentFeedback && (
+                  <div className="mt-4 bg-red-50 p-4 rounded-2xl w-full border border-red-100 flex flex-col gap-2">
+                    <p className="text-sm text-red-600 font-bold flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                      {paymentFeedback.message}
+                    </p>
+                    <p className="text-xs text-red-500 font-medium ml-7">
+                      {paymentFeedback.action}
+                    </p>
+                  </div>
                 )}
               </div>
               
@@ -555,55 +641,73 @@ export default function ServiceDetails() {
         {step === 'complete' && receipt && (
           <motion.div 
             key="complete"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="flex flex-col items-center max-w-2xl mx-auto"
           >
-            <div className="bg-white p-12 rounded-[4rem] border border-slate-200 shadow-2xl max-w-lg w-full relative overflow-hidden text-center">
-              <div className="absolute top-0 inset-x-0 h-4 bg-green-500" />
-              
-              <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-xl shadow-green-100 border-4 border-white">
-                <ShieldCheck className="w-10 h-10" />
+            {/* Success Header */}
+            <div className="bg-white p-8 rounded-t-[3rem] w-full text-center border-t border-x border-slate-200 shadow-sm relative z-10">
+              <div className="absolute top-0 inset-x-0 h-3 bg-green-500 rounded-t-[3rem]" />
+              <div className="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner ring-8 ring-green-50/50">
+                <ShieldCheck className="w-12 h-12" />
               </div>
+              <h2 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">Application Successful</h2>
+              <p className="text-slate-500 text-lg">Your application has been securely submitted and payment is verified.</p>
+            </div>
 
-              <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Application Submitted!</h2>
-              <p className="text-slate-500 font-medium mb-10">Your reference node has been broadcasted to the admin queue.</p>
+            {/* Receipt Ticket Body */}
+            <div className="w-full bg-slate-50 border-x border-b border-slate-200 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+              {/* Receipt cutoff visual edge (jagged/dashed) */}
+              <div className="absolute top-0 left-0 right-0 flex justify-between px-6 -mt-3">
+                {[...Array(12)].map((_, i) => (
+                  <div key={i} className="w-6 h-6 bg-slate-50 rounded-full shadow-inner border-t border-slate-200"></div>
+                ))}
+              </div>
+              
+              <div className="border-t-2 border-dashed border-slate-200 mx-8 mt-2"></div>
 
-              <div className="bg-slate-50 rounded-[2.5rem] p-8 border border-slate-100 text-left space-y-6 shadow-inner mb-10">
-                <div className="flex justify-between items-center border-b border-white pb-4">
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Transaction Receipt</h3>
-                  <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">L</div>
+              <div className="p-10 space-y-8">
+                <div className="flex justify-between items-end mb-6">
+                   <div>
+                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Official Receipt</h3>
+                     <p className="text-slate-800 font-bold">GovTech Portal</p>
+                   </div>
+                   <div className="text-right">
+                     <p className="font-mono text-xs text-slate-500 mb-1">TXN_ID</p>
+                     <p className="font-mono text-sm font-bold text-slate-800 break-all w-48">{receipt.transactionId}</p>
+                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-y-4 text-xs font-bold">
-                  <div className="text-slate-400 uppercase tracking-widest">Service</div>
-                  <div className="text-slate-800 text-right">{receipt.serviceName}</div>
-                  
-                  <div className="text-slate-400 uppercase tracking-widest">Amount Paid</div>
-                  <div className="text-indigo-600 text-right">₹{receipt.amount.toFixed(2)}</div>
-                  
-                  <div className="text-slate-400 uppercase tracking-widest">Reference ID</div>
-                  <div className="text-slate-800 text-right font-mono tracking-tighter">{receipt.transactionId}</div>
-                  
-                  <div className="text-slate-400 uppercase tracking-widest">Date & Time</div>
-                  <div className="text-slate-800 text-right">{receipt.date}</div>
-                </div>
 
-                <div className="pt-4 border-t border-white text-center">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-4">Official Payment Confirmation</p>
-                  <div className="flex justify-center gap-2">
-                     <div className="w-6 h-6 bg-white rounded flex items-center justify-center text-indigo-600 border border-slate-100">✔</div>
-                     <div className="w-6 h-6 bg-white rounded flex items-center justify-center text-indigo-600 border border-slate-100">✔</div>
+                <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
+                  <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+                    <span className="text-sm font-bold text-slate-500 uppercase">Service Description</span>
+                    <span className="text-right font-bold text-slate-800 ml-4">{receipt.serviceName}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+                    <span className="text-sm font-bold text-slate-500 uppercase">Date & Time</span>
+                    <span className="text-right font-medium text-slate-700">{receipt.date}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-lg font-black text-slate-900 uppercase">Total Paid</span>
+                    <span className="text-2xl font-black text-green-600">₹{receipt.amount.toFixed(2)}</span>
                   </div>
                 </div>
-              </div>
 
-              <button
-                onClick={() => navigate('/user/requests')}
-                className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-bold text-lg shadow-2xl hover:bg-indigo-600 transition-all flex items-center justify-center gap-3"
-              >
-                View Request History <ChevronRight className="w-5 h-5" />
-              </button>
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex-1 bg-white border-2 border-slate-200 text-slate-700 font-bold py-4 rounded-2xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm flex justify-center items-center gap-2"
+                  >
+                    Print Receipt
+                  </button>
+                  <button 
+                    onClick={() => navigate('/user/requests')}
+                    className="flex-1 bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-slate-900 transition-all shadow-lg flex justify-center items-center gap-2"
+                  >
+                    View Request History <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

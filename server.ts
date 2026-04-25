@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { Cashfree } from "cashfree-pg";
+import { Cashfree, CFEnvironment } from "cashfree-pg";
 import dotenv from "dotenv";
 import * as admin from "firebase-admin";
 import crypto from "crypto";
@@ -10,7 +10,7 @@ dotenv.config();
 
 Cashfree.XClientId = process.env.CASHFREE_CLIENT_ID || "TEST_APP_ID";
 Cashfree.XClientSecret = process.env.CASHFREE_CLIENT_SECRET || "TEST_SECRET_KEY";
-Cashfree.XEnvironment = Cashfree.Environment.SANDBOX;
+Cashfree.XEnvironment = CFEnvironment.SANDBOX;
 
 let firebaseAdminApp: admin.app.App | null = null;
 
