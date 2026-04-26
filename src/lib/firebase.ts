@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 // import { getStorage } from 'firebase/storage';
 import { getAnalytics } from "firebase/analytics";
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -18,7 +19,34 @@ const envConfig = {
 console.log("Firebase config:", envConfig);
 
 const app = initializeApp(envConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize App Check if configured (optional)
+if (typeof window !== 'undefined') {
+  try {
+    const debugToken = import.meta.env.VITE_APP_CHECK_DEBUG_TOKEN;
+    const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+
+    if (debugToken) {
+      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+    }
+
+    if (siteKey || debugToken) {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey || 'dummy-key-for-debug'),
+        isTokenAutoRefreshEnabled: true
+      });
+      console.log("Firebase App Check initialized.");
+    }
+  } catch (e) {
+    console.warn("App Check failed to initialize. If Authentication is enforced, sign-in may fail.", e);
+  }
+}
+
+// Use initializeFirestore with experimentalForceLongPolling to improve connectivity in proxy environments
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
+
 // export const storage = getStorage(app);
 export const auth = getAuth(app);
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;

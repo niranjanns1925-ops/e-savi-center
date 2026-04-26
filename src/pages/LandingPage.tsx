@@ -1,10 +1,59 @@
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useAuth } from '../lib/AuthContext';
-import { FileText, CreditCard, Bell, ShieldCheck } from 'lucide-react';
+import { FileText, CreditCard, Bell, ShieldCheck, Mail, ArrowRight, Phone, MessageSquare } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { ConfirmationResult } from 'firebase/auth';
 
 export default function LandingPage() {
-  const { signIn } = useAuth();
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [authMode, setAuthMode] = useState<'google' | 'email' | 'phone'>('google');
+  
+  const { signIn, sendMagicLink, setupRecaptcha, signInPhone } = useAuth();
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    try {
+      setIsSending(true);
+      await sendMagicLink(email);
+      setEmail('');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handlePhoneSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone) return;
+    try {
+      setIsSending(true);
+      const appVerifier = setupRecaptcha('recaptcha-container');
+      const result = await signInPhone(phone, appVerifier);
+      setConfirmationResult(result);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp || !confirmationResult) return;
+    try {
+      setIsSending(true);
+      await confirmationResult.confirm(otp);
+    } catch (error) {
+      alert("Invalid verification code. Please try again.");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const features = [
     { icon: <FileText className="w-6 h-6" />, title: 'Simple Documentation', desc: 'Easily upload required documents for various government services.' },
@@ -33,16 +82,123 @@ export default function LandingPage() {
         <p className="text-xl text-slate-500 mb-12 max-w-2xl mx-auto leading-relaxed">
           Access all essential government services from a single dashboard. Secure, lightning-fast, and citizen-first.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-          <button
-            onClick={signIn}
-            className="w-full sm:w-auto px-10 py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all"
-          >
-            Launch Dashboard
-          </button>
-          <button className="w-full sm:w-auto px-10 py-5 bg-white text-slate-700 border border-slate-200 rounded-2xl font-bold text-lg hover:bg-slate-50 transition-all shadow-sm active:scale-95">
-            How it works
-          </button>
+        <div className="flex flex-col gap-6 justify-center items-center mb-16 w-full max-w-lg mx-auto">
+          <div className="flex bg-slate-100 p-1 rounded-xl w-full">
+            <button 
+              onClick={() => { setAuthMode('google'); setConfirmationResult(null); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${authMode === 'google' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Social
+            </button>
+            <button 
+              onClick={() => { setAuthMode('email'); setConfirmationResult(null); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${authMode === 'email' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Magic Link
+            </button>
+            <button 
+              onClick={() => { setAuthMode('phone'); setConfirmationResult(null); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${authMode === 'phone' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Phone
+            </button>
+          </div>
+
+          {authMode === 'google' && (
+            <button
+              onClick={signIn}
+              className="w-full px-8 py-5 bg-white text-slate-900 border-2 border-slate-200 rounded-2xl font-bold text-base shadow-sm hover:bg-slate-50 active:scale-95 transition-all flex items-center justify-center gap-3"
+            >
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+              Continue with Google
+            </button>
+          )}
+
+          {authMode === 'email' && (
+            <form onSubmit={handleMagicLink} className="w-full relative group animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="relative">
+                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <input 
+                  type="email" 
+                  placeholder="Enter your email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-14 pr-32 py-5 bg-white border-2 border-slate-200 rounded-[1.25rem] font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition-all shadow-sm"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={isSending}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 h-10 px-4 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all"
+                >
+                  {isSending ? 'Sending...' : 'Send Link'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {authMode === 'phone' && (
+            <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {!confirmationResult ? (
+                <form onSubmit={handlePhoneSignIn} className="w-full relative group">
+                  <div className="relative">
+                    <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                    <input 
+                      type="tel" 
+                      placeholder="+1 234 567 8900" 
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full pl-14 pr-32 py-5 bg-white border-2 border-slate-200 rounded-[1.25rem] font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition-all shadow-sm"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSending}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 h-10 px-4 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all"
+                    >
+                      {isSending ? 'Sending...' : 'Send OTP'}
+                    </button>
+                  </div>
+                  <div id="recaptcha-container" className="mt-2"></div>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="w-full relative group">
+                  <div className="relative">
+                    <MessageSquare className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                    <input 
+                      type="text" 
+                      placeholder="6-digit code" 
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      className="w-full pl-14 pr-32 py-5 bg-white border-2 border-slate-200 rounded-[1.25rem] font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition-all shadow-sm"
+                      maxLength={6}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSending}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 h-10 px-4 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all"
+                    >
+                      {isSending ? 'Verifying...' : 'Verify'}
+                    </button>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setConfirmationResult(null)}
+                    className="mt-4 text-[10px] uppercase tracking-widest font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+                  >
+                    ← Change phone number
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          <p className="text-[10px] text-slate-400 font-medium text-center">
+            {authMode === 'google' && "Fastest way to get started using your Google Account."}
+            {authMode === 'email' && "No password required. We'll send a magic link to your inbox."}
+            {authMode === 'phone' && "Standard SMS rates may apply for the verification code."}
+          </p>
         </div>
 
         <motion.div

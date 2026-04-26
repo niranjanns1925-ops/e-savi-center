@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  User, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  sendSignInLinkToEmail, 
+  isSignInWithEmailLink, 
+  signInWithEmailLink,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  ConfirmationResult
+} from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
@@ -8,6 +20,9 @@ interface AuthContextType {
   role: 'admin' | 'user' | null;
   loading: boolean;
   signIn: () => Promise<void>;
+  sendMagicLink: (email: string) => Promise<void>;
+  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
+  signInPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
   logOut: () => Promise<void>;
 }
 
@@ -19,6 +34,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const checkEmailLink = async () => {
+      if (isSignInWithEmailLink(auth, window.location.href)) {
+        let email = window.localStorage.getItem('emailForSignIn');
+        if (!email) {
+          email = window.prompt('Please provide your email for confirmation');
+        }
+        if (email) {
+          try {
+            setLoading(true);
+            await signInWithEmailLink(auth, email, window.location.href);
+            window.localStorage.removeItem('emailForSignIn');
+            // Clean up the URL
+            window.history.replaceState({}, '', window.location.pathname);
+          } catch (error: any) {
+            handleAuthError(error);
+          } finally {
+            setLoading(false);
+          }
+        }
+      }
+    };
+
+    checkEmailLink();
+
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -46,11 +85,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsub;
   }, []);
 
+  const handleAuthError = (error: any) => {
+    console.error("Firebase Sign-In Details:", {
+      code: error.code,
+      message: error.message,
+      hostname: window.location.hostname,
+      stack: error.stack
+    });
+
+    if (error.code === 'auth/unauthorized-domain') {
+      alert(`🚫 DOMAIN NOT AUTHORIZED\n\nThis domain (${window.location.hostname}) is not in your Firebase 'Authorized Domains' list.\n\nFix it:\n1. Open Firebase Console\n2. Go to Authentication > Settings > Authorized Domains\n3. Click 'Add Domain' and enter: ${window.location.hostname}`);
+    } else if (error.code === 'auth/popup-blocked' || error.message?.includes('Pending promise was never set')) {
+      alert("🚫 POPUP BLOCKED\n\nYour browser or the preview environment blocked the sign-in window.\n\nPLEASE OPEN THIS APP IN A NEW TAB (click ↗️ at top right) to sign in.");
+    } else if (error.code === 'auth/internal-error') {
+      alert("🔧 FIREBASE CONFIGURATION MISSING\n\nThis 'internal-error' almost always means your Firebase project is missing a 'Support Email'.\n\nFix it:\n1. Open Firebase Console\n2. Go to Project Settings (Gear icon ⚙️)\n3. In 'General' tab, find 'Support email' and select your email address.\n4. Click Save and try again.");
+    } else if (error.code === 'auth/operation-not-allowed') {
+      alert("🚫 AUTH PROVIDER NOT ENABLED\n\nThis login method is not enabled in your Firebase project.\n\nFix it:\n1. Open Firebase Console\n2. Go to Authentication > Sign-in method\n3. Enable the provider you just used (Google or Phone).");
+    } else if (error.code === 'auth/app-check-token-is-invalid' || error.code === 'auth/firebase-app-check-token-is-invalid') {
+      alert("🚫 APP CHECK ERROR\n\nFirebase App Check is blocking this request. If you enabled App Check in the Firebase Console, you must ensure 'Authentication' is not enforced yet, or that this domain is registered.\n\nTemporary Fix:\n1. Go to Firebase Console > App Check > Enforcement\n2. Set 'Authentication' to 'Unenforced'.");
+    } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+      alert(`❌ SIGN-IN ERROR\n\nCode: ${error.code}\nMessage: ${error.message}\n\nPlease try opening in a new tab if you haven't already.`);
+    }
+  };
+
   const signIn = async () => {
     try {
       const inIframe = window !== window.top;
       if (inIframe) {
-        alert("Google Sign-In is blocked inside this preview's iframe due to browser security restrictions.\n\nPLEASE CLICK THE 'OPEN IN NEW TAB' ICON (↗️) AT THE TOP RIGHT OF THIS PREVIEW, then click Sign in again.");
+        alert("⚠️ LOGIN RESTRICTED IN PREVIEW IFRAME\n\nSign-In is blocked by browsers when inside an iframe for security.\n\n1. Look at the top-right corner of this preview window.\n2. Click the 'Open in new tab' icon (↗️).\n3. In the new tab, click 'Launch Dashboard' to sign in successfully.");
         return;
       }
       
@@ -58,16 +120,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error("Sign in error:", error);
-      if (error.code === 'auth/unauthorized-domain') {
-        alert("Firebase is blocking this login because the domain is not authorized.\n\nPlease go to:\nFirebase Console > Authentication > Settings > Authorized Domains\n\nAnd add the following domains:\n1. " + window.location.hostname + "\n2. e-savi-center.vercel.app");
-      } else if (error.code === 'auth/popup-blocked' || error.message?.includes('Pending promise was never set')) {
-        alert("Sign-in is being blocked by your browser's security settings for iframes.\n\nPLEASE CLICK THE 'OPEN IN NEW TAB' ICON (↗️) AT THE TOP RIGHT OF THIS PREVIEW TO SIGN IN SUCCESSFULLY.");
-      } else if (error.code === 'auth/internal-error') {
-        alert("Firebase internal auth error.\n\n1. Go to Firebase Console > Authentication > Settings (or Project Settings) > General.\n2. Ensure you have selected a 'Support email'.\n3. Ensure 'Google' is properly enabled in Sign-in methods.\n\nIf that's done and you still see this, click the 'Open in new tab' icon ↗️ at the top right.");
-      } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
-        alert("Failed to sign in: " + error.message);
+      handleAuthError(error);
+    }
+  };
+
+
+  const sendMagicLink = async (email: string) => {
+    try {
+      const actionCodeSettings = {
+        url: window.location.origin,
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', email);
+      alert(`✨ Magic link sent to ${email}!\n\nPlease check your inbox and click the link to sign in.`);
+    } catch (error: any) {
+      handleAuthError(error);
+    }
+  };
+
+  const setupRecaptcha = (containerId: string) => {
+    return new RecaptchaVerifier(auth, containerId, {
+      size: 'invisible',
+      callback: () => {
+        console.log('Recaptcha resolved');
       }
+    });
+  };
+
+  const signInPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier) => {
+    try {
+      return await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+    } catch (error: any) {
+      handleAuthError(error);
+      throw error;
     }
   };
 
@@ -76,7 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signIn, logOut }}>
+    <AuthContext.Provider value={{ user, role, loading, signIn, sendMagicLink, setupRecaptcha, signInPhone, logOut }}>
       {children}
     </AuthContext.Provider>
   );
