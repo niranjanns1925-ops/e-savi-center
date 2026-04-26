@@ -7,10 +7,7 @@ import {
   signOut, 
   sendSignInLinkToEmail, 
   isSignInWithEmailLink, 
-  signInWithEmailLink,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult
+  signInWithEmailLink
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -21,8 +18,6 @@ interface AuthContextType {
   loading: boolean;
   signIn: () => Promise<void>;
   sendMagicLink: (email: string) => Promise<void>;
-  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
-  signInPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
   logOut: () => Promise<void>;
 }
 
@@ -100,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else if (error.code === 'auth/internal-error') {
       alert("🔧 FIREBASE CONFIGURATION MISSING\n\nThis 'internal-error' almost always means your Firebase project is missing a 'Support Email'.\n\nFix it:\n1. Open Firebase Console\n2. Go to Project Settings (Gear icon ⚙️)\n3. In 'General' tab, find 'Support email' and select your email address.\n4. Click Save and try again.");
     } else if (error.code === 'auth/operation-not-allowed') {
-      alert("🚫 AUTH PROVIDER NOT ENABLED\n\nThis login method is not enabled in your Firebase project.\n\nFix it:\n1. Open Firebase Console\n2. Go to Authentication > Sign-in method\n3. Enable the provider you just used (Google or Phone).");
+      alert("🚫 AUTH PROVIDER NOT ENABLED\n\nThis login method is not enabled in your Firebase project.\n\nFix it:\n1. Open Firebase Console\n2. Go to Authentication > Sign-in method\n3. Enable the provider you just used (Google or Email).");
     } else if (error.code === 'auth/app-check-token-is-invalid' || error.code === 'auth/firebase-app-check-token-is-invalid') {
       alert("🚫 APP CHECK ERROR\n\nFirebase App Check is blocking this request. If you enabled App Check in the Firebase Console, you must ensure 'Authentication' is not enforced yet, or that this domain is registered.\n\nTemporary Fix:\n1. Go to Firebase Console > App Check > Enforcement\n2. Set 'Authentication' to 'Unenforced'.");
     } else if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
@@ -139,30 +134,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const setupRecaptcha = (containerId: string) => {
-    return new RecaptchaVerifier(auth, containerId, {
-      size: 'invisible',
-      callback: () => {
-        console.log('Recaptcha resolved');
-      }
-    });
-  };
-
-  const signInPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier) => {
-    try {
-      return await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-    } catch (error: any) {
-      handleAuthError(error);
-      throw error;
-    }
-  };
-
   const logOut = async () => {
     await signOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signIn, sendMagicLink, setupRecaptcha, signInPhone, logOut }}>
+    <AuthContext.Provider value={{ user, role, loading, signIn, sendMagicLink, logOut }}>
       {children}
     </AuthContext.Provider>
   );

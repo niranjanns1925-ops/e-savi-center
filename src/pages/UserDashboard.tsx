@@ -3,9 +3,12 @@ import { collection, query, onSnapshot, where, orderBy, doc, updateDoc } from 'f
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link, Routes, Route } from 'react-router-dom';
+import { 
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 
 interface Service {
   id: string;
@@ -13,6 +16,7 @@ interface Service {
   description: string;
   price: number;
   requiredDocuments: string[];
+  category?: string;
 }
 
 interface Request {
@@ -34,16 +38,26 @@ interface Notification {
   createdAt: any;
 }
 
-function UserOverview({ services }: { services: Service[] }) {
+function UserOverview({ services, requests }: { services: Service[], requests: Request[] }) {
   const [search, setSearch] = useState('');
-  const filteredServices = services.filter(s => 
-    (s.title || '').toLowerCase().includes(search.toLowerCase()) || 
-    (s.description || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+
+  const categories = ['All', ...Array.from(new Set(services.map(s => s.category).filter(Boolean)))];
+
+  const filteredServices = services.filter(s => {
+    const matchesSearch = (s.title || '').toLowerCase().includes(search.toLowerCase()) || 
+                          (s.description || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || s.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const totalRequests = requests.length;
+  const pendingRequests = requests.filter(r => r.status === 'pending').length;
+  const approvedRequests = requests.filter(r => r.status === 'accepted').length;
 
   return (
     <div className="space-y-6">
-      <div className="w-full relative mb-8 md:mb-10 rounded-3xl md:rounded-[2rem] overflow-hidden shadow-lg bg-indigo-900">
+      <div className="w-full relative mb-6 md:mb-8 rounded-3xl md:rounded-[2rem] overflow-hidden shadow-lg bg-indigo-900">
         <img 
           src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=2000" 
           alt="Dashboard Banner" 
@@ -55,19 +69,97 @@ function UserOverview({ services }: { services: Service[] }) {
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">
                Portal Access
             </div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">E-Service Marketplace</h2>
-            <p className="text-indigo-100 font-medium tracking-wide text-sm mt-2 max-w-xl">Official Citizen Portal Services</p>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">E-Service Dashboard</h2>
+            <p className="text-indigo-100 font-medium tracking-wide text-sm mt-2 max-w-xl">Manage your applications and find new services</p>
           </div>
-          <div className="relative w-full md:max-w-sm shrink-0">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search for a service..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white placeholder:text-white/50 rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm"
-            />
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:max-w-xl shrink-0">
+            <div className="relative w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search for a service..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white placeholder:text-white/50 rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm"
+              />
+            </div>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full sm:w-48 px-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm appearance-none"
+            >
+              {categories.map(cat => (
+                <option key={cat as string} value={cat as string} className="text-slate-900">{cat as string}</option>
+              ))}
+            </select>
           </div>
+        </div>
+      </div>
+
+      {/* Metrics Section */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Applications</p>
+            <h3 className="text-3xl font-black text-slate-800">{totalRequests}</h3>
+          </div>
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+            <FileText className="w-6 h-6" />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pending Approval</p>
+            <h3 className="text-3xl font-black text-slate-800">{pendingRequests}</h3>
+          </div>
+          <div className="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-2xl flex items-center justify-center">
+            <Clock className="w-6 h-6" />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Approved</p>
+            <h3 className="text-3xl font-black text-slate-800">{approvedRequests}</h3>
+          </div>
+          <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+        </div>
+        
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center justify-center relative">
+          {requests.length > 0 ? (
+             <ResponsiveContainer width="100%" height={100}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Pending', value: pendingRequests, color: '#f59e0b' },
+                    { name: 'Accepted', value: approvedRequests, color: '#10b981' },
+                    { name: 'Rejected', value: requests.filter(r => r.status === 'rejected').length, color: '#ef4444' }
+                  ].filter(d => d.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={30}
+                  outerRadius={50}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {
+                    [
+                      { name: 'Pending', value: pendingRequests, color: '#f59e0b' },
+                      { name: 'Accepted', value: approvedRequests, color: '#10b981' },
+                      { name: 'Rejected', value: requests.filter(r => r.status === 'rejected').length, color: '#ef4444' }
+                    ].filter(d => d.value > 0).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <RechartsTooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mt-2">
+              No Application Data
+            </div>
+          )}
         </div>
       </div>
 
@@ -105,6 +197,11 @@ function UserOverview({ services }: { services: Service[] }) {
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
                   <Grid className="w-6 h-6" />
                 </div>
+                {s.category && (
+                  <span className="inline-block px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-widest mb-3 self-start">
+                    {s.category}
+                  </span>
+                )}
                 <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
                 <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
                 
@@ -300,7 +397,7 @@ export default function UserDashboard() {
 
   return (
     <Routes>
-      <Route path="/" element={<UserOverview services={services} />} />
+      <Route path="/" element={<UserOverview services={services} requests={requests} />} />
       <Route path="/requests" element={<UserRequests requests={requests} />} />
       <Route path="/notifications" element={<UserNotifications />} />
     </Routes>
