@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Logo } from './Logo';
 
 export default function Navbar() {
-  const { user, role, logOut, signIn } = useAuth();
+  const { user, role, logOut, signIn, register } = useAuth();
 
   return (
     <nav className="h-16 bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -44,12 +44,20 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <button
-              onClick={signIn}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-            >
-              Sign In
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={signIn}
+                className="px-6 py-2 text-slate-600 font-bold text-sm hover:text-slate-900 transition-colors"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={register}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
+              >
+                Register
+              </button>
+            </div>
           )}
         </div>
       </div>

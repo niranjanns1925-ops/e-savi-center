@@ -8,25 +8,11 @@ import crypto from "crypto";
 
 dotenv.config();
 
-let cashfreeClient: Cashfree | null = null;
-
-function getCashfreeClient() {
-  if (!cashfreeClient) {
-    const clientId = process.env.CASHFREE_CLIENT_ID;
-    const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
-    
-    if (!clientId || !clientSecret) {
-      throw new Error('CASHFREE_CLIENT_ID or CASHFREE_CLIENT_SECRET environment variable is missing.');
-    }
-    
-    cashfreeClient = new Cashfree(
-      CFEnvironment.SANDBOX, // Or PRODUCTION depending on your environment
-      clientId,
-      clientSecret
-    );
-  }
-  return cashfreeClient;
-}
+const cashfreeClient = new Cashfree(
+  CFEnvironment.SANDBOX,
+  process.env.CASHFREE_CLIENT_ID || "TEST_APP_ID",
+  process.env.CASHFREE_CLIENT_SECRET || "TEST_SECRET_KEY"
+);
 
 let firebaseAdminApp: admin.app.App | null = null;
 
@@ -70,7 +56,7 @@ async function startServer() {
         return res.status(400).send("Missing webhook headers or body");
       }
 
-      getCashfreeClient().PGVerifyWebhookSignature(signature, req.rawBody, timestamp);
+      cashfreeClient.PGVerifyWebhookSignature(signature, req.rawBody, timestamp);
       
       const payload = req.body;
       console.log("Verified Cashfree Webhook:", payload);
@@ -105,7 +91,11 @@ async function startServer() {
         },
       };
 
-      const order = await getCashfreeClient().PGCreateOrder(orderRequest);
+      if (!process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === "TEST_APP_ID") {
+        return res.status(500).json({ success: false, message: "Payment gateway is not configured. Please add CASHFREE_CLIENT_ID to environment variables." });
+      }
+
+      const order = await cashfreeClient.PGCreateOrder(orderRequest);
       res.json({ success: true, order: order.data });
     } catch (error: any) {
       console.error("Cashfree order creation error:", error?.response?.data || error);
@@ -121,7 +111,11 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "Missing order_id" });
       }
       
-      const response = await getCashfreeClient().PGOrderFetchPayments(order_id);
+      if (!process.env.CASHFREE_CLIENT_ID || process.env.CASHFREE_CLIENT_ID === "TEST_APP_ID") {
+        return res.status(500).json({ success: false, message: "Payment gateway is not configured." });
+      }
+      
+      const response = await cashfreeClient.PGOrderFetchPayments(order_id);
       res.json({ success: true, data: response.data });
     } catch (error: any) {
       console.error("Cashfree verification error:", error?.response?.data || error);

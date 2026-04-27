@@ -3,12 +3,10 @@ import { collection, query, onSnapshot, where, orderBy, doc, updateDoc } from 'f
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
+import { Search, FileText, CheckCircle, XCircle, Grid, ChevronRight, Bell, Inbox, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link, Routes, Route } from 'react-router-dom';
-import { 
-  PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer 
-} from 'recharts';
+import TaskInputBox from '../components/TaskInputBox';
 
 interface Service {
   id: string;
@@ -16,7 +14,6 @@ interface Service {
   description: string;
   price: number;
   requiredDocuments: string[];
-  category?: string;
 }
 
 interface Request {
@@ -38,26 +35,16 @@ interface Notification {
   createdAt: any;
 }
 
-function UserOverview({ services, requests }: { services: Service[], requests: Request[] }) {
+function UserOverview({ services }: { services: Service[] }) {
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-
-  const categories = ['All', ...Array.from(new Set(services.map(s => s.category).filter(Boolean)))];
-
-  const filteredServices = services.filter(s => {
-    const matchesSearch = (s.title || '').toLowerCase().includes(search.toLowerCase()) || 
-                          (s.description || '').toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || s.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const totalRequests = requests.length;
-  const pendingRequests = requests.filter(r => r.status === 'pending').length;
-  const approvedRequests = requests.filter(r => r.status === 'accepted').length;
+  const filteredServices = services.filter(s => 
+    (s.title || '').toLowerCase().includes(search.toLowerCase()) || 
+    (s.description || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
-      <div className="w-full relative mb-6 md:mb-8 rounded-3xl md:rounded-[2rem] overflow-hidden shadow-lg bg-indigo-900">
+      <div className="w-full relative mb-8 md:mb-10 rounded-3xl md:rounded-[2rem] overflow-hidden shadow-lg bg-indigo-900">
         <img 
           src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=2000" 
           alt="Dashboard Banner" 
@@ -69,157 +56,62 @@ function UserOverview({ services, requests }: { services: Service[], requests: R
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-[10px] font-bold uppercase tracking-widest mb-3">
                Portal Access
             </div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">E-Service Dashboard</h2>
-            <p className="text-indigo-100 font-medium tracking-wide text-sm mt-2 max-w-xl">Manage your applications and find new services</p>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">E-Service Marketplace</h2>
+            <p className="text-indigo-100 font-medium tracking-wide text-sm mt-2 max-w-xl">Official Citizen Portal Services</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 w-full md:max-w-xl shrink-0">
-            <div className="relative w-full">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search for a service..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white placeholder:text-white/50 rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm"
-              />
-            </div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full sm:w-48 px-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm appearance-none"
-            >
-              {categories.map(cat => (
-                <option key={cat as string} value={cat as string} className="text-slate-900">{cat as string}</option>
-              ))}
-            </select>
+          <div className="relative w-full md:max-w-sm shrink-0">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search for a service..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 bg-slate-900/40 backdrop-blur-md border border-white/20 text-white placeholder:text-white/50 rounded-2xl focus:ring-2 focus:ring-white/40 focus:border-white outline-none transition-all shadow-sm font-medium text-sm"
+            />
           </div>
         </div>
       </div>
 
-      {/* Metrics Section */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Applications</p>
-            <h3 className="text-3xl font-black text-slate-800">{totalRequests}</h3>
-          </div>
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-            <FileText className="w-6 h-6" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pending Approval</p>
-            <h3 className="text-3xl font-black text-slate-800">{pendingRequests}</h3>
-          </div>
-          <div className="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-2xl flex items-center justify-center">
-            <Clock className="w-6 h-6" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Approved</p>
-            <h3 className="text-3xl font-black text-slate-800">{approvedRequests}</h3>
-          </div>
-          <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-        </div>
-        
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col items-center justify-center relative">
-          {requests.length > 0 ? (
-             <ResponsiveContainer width="100%" height={100}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Pending', value: pendingRequests, color: '#f59e0b' },
-                    { name: 'Accepted', value: approvedRequests, color: '#10b981' },
-                    { name: 'Rejected', value: requests.filter(r => r.status === 'rejected').length, color: '#ef4444' }
-                  ].filter(d => d.value > 0)}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={30}
-                  outerRadius={50}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {
-                    [
-                      { name: 'Pending', value: pendingRequests, color: '#f59e0b' },
-                      { name: 'Accepted', value: approvedRequests, color: '#10b981' },
-                      { name: 'Rejected', value: requests.filter(r => r.status === 'rejected').length, color: '#ef4444' }
-                    ].filter(d => d.value > 0).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <RechartsTooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mt-2">
-              No Application Data
-            </div>
-          )}
-        </div>
+      <div className="mb-12">
+        <h3 className="text-xl font-bold text-slate-800 mb-6">Task Management (Demo)</h3>
+        <TaskInputBox />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <AnimatePresence>
-          {filteredServices.map((s: any) => {
-            const hasNoDocs = !s.requiredDocuments || s.requiredDocuments.length === 0;
-            const isInactive = !s.isActive;
-            const needsAttention = hasNoDocs || isInactive;
-            
-            return (
-              <motion.div
-                layout
-                key={s.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`bg-white rounded-3xl p-6 shadow-sm flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-indigo-600 hover:shadow-md transition-shadow' : 'border-l-slate-200 grayscale opacity-70'}`}
-              >
-                {needsAttention && (
-                  <div className="absolute top-4 right-4 group/tooltip flex items-center justify-center">
-                    {isInactive ? (
-                       <div className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg">
-                         Inactive
-                       </div>
-                    ) : (
-                       <AlertTriangle className="w-5 h-5 text-amber-500 cursor-help" />
-                    )}
-                    <div className="absolute bottom-full right-0 mb-2 w-56 p-3 bg-slate-900 text-white text-xs rounded-xl shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-10 font-medium">
-                      {isInactive && !hasNoDocs && "This service is currently inactive."}
-                      {hasNoDocs && !isInactive && "This service requires documents to be configured by the admin."}
-                      {hasNoDocs && isInactive && "Inactive & missing required documents."}
-                    </div>
-                  </div>
-                )}
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
-                  <Grid className="w-6 h-6" />
+          {filteredServices.map((s: any) => (
+            <motion.div
+              layout
+              key={s.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`bg-white rounded-3xl p-6 shadow-sm flex flex-col group border-l-4 relative ${s.isActive ? 'border-l-indigo-600 hover:shadow-md transition-shadow' : 'border-l-slate-200 grayscale opacity-70'}`}
+            >
+              {!s.isActive && (
+                <div className="absolute top-4 right-4 bg-slate-900 text-white text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg">
+                  Inactive
                 </div>
-                {s.category && (
-                  <span className="inline-block px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-widest mb-3 self-start">
-                    {s.category}
-                  </span>
-                )}
-                <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
-                <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
-                
-                <div className="mt-auto pt-6 border-t border-slate-50 flex justify-between items-center">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Fee Starts from</span>
-                    <span className="text-xl font-black text-slate-900 tracking-tight">₹{s.price}</span>
-                  </div>
-                  <Link
-                    to={`/service/${s.id}`}
-                    className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive && !hasNoDocs ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'}`}
-                  >
-                    View Details
-                  </Link>
+              )}
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${s.isActive ? 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <Grid className="w-6 h-6" />
+              </div>
+              <h4 className="font-bold text-xl text-slate-800 mb-2 truncate">{s.title || 'Untitled'}</h4>
+              <p className="text-slate-500 text-sm mb-6 line-clamp-2 leading-relaxed">{s.description}</p>
+              
+              <div className="mt-auto pt-6 border-t border-slate-50 flex justify-between items-center">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Fee Starts from</span>
+                  <span className="text-xl font-black text-slate-900 tracking-tight">₹{s.price}</span>
                 </div>
-              </motion.div>
-            );
-          })}
+                <Link
+                  to={`/service/${s.id}`}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${s.isActive ? 'bg-slate-900 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none'}`}
+                >
+                  View Details
+                </Link>
+              </div>
+            </motion.div>
+          ))}
         </AnimatePresence>
         {filteredServices.length === 0 && (
           <div className="col-span-full py-16 md:py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
@@ -397,7 +289,7 @@ export default function UserDashboard() {
 
   return (
     <Routes>
-      <Route path="/" element={<UserOverview services={services} requests={requests} />} />
+      <Route path="/" element={<UserOverview services={services} />} />
       <Route path="/requests" element={<UserRequests requests={requests} />} />
       <Route path="/notifications" element={<UserNotifications />} />
     </Routes>

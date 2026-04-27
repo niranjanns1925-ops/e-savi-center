@@ -24,8 +24,7 @@ service cloud.firestore {
                data.description is string && data.description.size() <= 1000 &&
                data.requiredDocuments is list && data.requiredDocuments.size() <= 20 &&
                data.price is number && data.price >= 0 &&
-               data.isActive is bool &&
-               (!('category' in data) || data.category == null || (data.category is string && data.category.size() <= 100));
+               data.isActive is bool;
       }
       
       allow read: if isSignedIn();

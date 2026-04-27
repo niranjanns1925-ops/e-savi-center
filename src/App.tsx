@@ -7,6 +7,7 @@ import UserDashboard from './pages/UserDashboard';
 import ServiceDetails from './pages/ServiceDetails';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
+import { AuthModal } from './components/AuthModal';
 
 import ProfilePage from './pages/ProfilePage';
 import ServiceInfo from './pages/ServiceInfo';
@@ -22,7 +23,7 @@ function PrivateRoute({ children, roleRequired }: { children: React.ReactNode, r
 }
 
 function AppContent() {
-  const { role, user } = useAuth();
+  const { role, user, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   
   return (
     <Router>
@@ -80,6 +81,7 @@ function AppContent() {
           <div className="uppercase tracking-widest opacity-80">&copy; 2026 Lakshmi E-Sevai Maiyam. Citizen Portal v2.4.0</div>
         </footer>
       </div>
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </Router>
   );
 }

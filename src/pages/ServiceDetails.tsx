@@ -88,8 +88,7 @@ export default function ServiceDetails() {
         const cashfree = window.Cashfree({ mode: "sandbox" });
         
         cashfree.checkout({
-          paymentSessionId: order.payment_session_id,
-          redirectTarget: "_modal"
+          paymentSessionId: order.payment_session_id
         }).then((res: any) => {
           if (res.error) {
             console.error("Payment error from Cashfree:", res.error);

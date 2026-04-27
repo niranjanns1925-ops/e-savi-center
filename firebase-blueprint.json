@@ -8,11 +8,9 @@
         "title": { "type": "string", "description": "Title of the service" },
         "description": { "type": "string", "description": "Description of the service" },
         "requiredDocuments": { "type": "array", "description": "List of required document names" },
-        "price": { "type": "number", "description": "Price of the service" },
-        "isActive": { "type": "boolean", "description": "Service active status" },
-        "category": { "type": "string", "description": "Category of the service" }
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Service status" }
       },
-      "required": ["title", "description", "requiredDocuments", "price", "isActive", "category"]
+      "required": ["title", "description", "requiredDocuments", "status"]
     },
     "Request": {
       "title": "Request",
